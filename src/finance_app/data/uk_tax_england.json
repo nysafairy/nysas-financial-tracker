@@ -1,0 +1,46 @@
+{
+  "tax_year": "2026-27",
+  "jurisdiction": "England",
+  "source": "https://www.gov.uk/income-tax-rates",
+  "personal_allowance": 12570,
+  "personal_allowance_taper_threshold": 100000,
+  "basic_rate_band": 37700,
+  "higher_rate_threshold_including_pa": 50270,
+  "additional_rate_threshold": 125140,
+  "rates": {
+    "basic": 0.20,
+    "higher": 0.40,
+    "additional": 0.45
+  },
+  "savings": {
+    "starting_rate_limit": 5000,
+    "personal_savings_allowance": {
+      "basic": 1000,
+      "higher": 500,
+      "additional": 0
+    },
+    "rates": {
+      "basic": 0.20,
+      "higher": 0.40,
+      "additional": 0.45
+    },
+    "note": "From April 2027 savings rates rise to 22%/42%/47%."
+  },
+  "dividends": {
+    "allowance": 500,
+    "rates": {
+      "basic": 0.1075,
+      "higher": 0.3575,
+      "additional": 0.3935
+    },
+    "source": "https://www.gov.uk/tax-on-dividends"
+  },
+  "property_allowance": 1000,
+  "trading_allowance": 1000,
+  "trusts": {
+    "de_minimis": 500,
+    "discretionary_rate_non_dividend": 0.45,
+    "discretionary_rate_dividend": 0.3935,
+    "note": "Beneficiary trust distributions are modelled simply; discretionary trust rates apply inside the trust."
+  }
+}

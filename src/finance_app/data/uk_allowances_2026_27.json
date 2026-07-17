@@ -1,0 +1,50 @@
+{
+  "tax_year": "2026-27",
+  "source_notes": [
+    "Adult ISA allowance £20,000 across Cash / Stocks & Shares / LISA / IFISA.",
+    "LISA max £4,000 of that £20,000; government bonus is 25% (up to £1,000), not 20%.",
+    "Junior ISA £9,000 is separate from the adult £20,000 allowance.",
+    "Pension annual allowance simplified at £60,000 (taper / MPAA not modelled yet)."
+  ],
+  "allowances": {
+    "adult_isa": {
+      "label": "Adult ISA",
+      "limit": 20000,
+      "unit": "GBP",
+      "notes": "Combined subscriptions across cash, S&S, LISA and IFISA."
+    },
+    "lisa": {
+      "label": "Lifetime ISA",
+      "limit": 4000,
+      "unit": "GBP",
+      "bonus_rate": 0.25,
+      "max_bonus": 1000,
+      "counts_toward": "adult_isa",
+      "notes": "25% government bonus on contributions; counts inside the £20k ISA limit."
+    },
+    "junior_isa": {
+      "label": "Junior ISA",
+      "limit": 9000,
+      "unit": "GBP",
+      "notes": "Per child; separate from adult ISA allowance."
+    },
+    "pension_annual": {
+      "label": "Pension annual allowance",
+      "limit": 60000,
+      "unit": "GBP",
+      "notes": "Simplified headline limit. Taper and money-purchase annual allowance not applied."
+    },
+    "dividend_allowance": {
+      "label": "Dividend allowance",
+      "limit": 500,
+      "unit": "GBP",
+      "notes": "Tax-free dividend band for 2026/27."
+    },
+    "capital_gains": {
+      "label": "Capital gains annual exempt amount",
+      "limit": 3000,
+      "unit": "GBP",
+      "notes": "Individuals; CGT tracking is Phase-later."
+    }
+  }
+}
