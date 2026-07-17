@@ -54,38 +54,35 @@ def _getting_started() -> None:
         ),
         (
             "02",
-            "Accounts",
-            "In Edit data, add the accounts you care about: current, savings, ISA, "
-            "pension, credit card, mortgage, and so on. Mark debts clearly; they "
-            "reduce net worth.",
+            "Start a snapshot",
+            "The app stays view-only until you click Start new snapshot in the bar "
+            "at the top. That opens an autosaved draft session.",
         ),
         (
             "03",
-            "Balances",
-            "On Snapshots, pick a date and enter balances for as many accounts as "
-            "you can. One date is one snapshot of your position. Incomplete dates "
-            "skew charts.",
+            "Balances sheet",
+            "Edit data opens on a spreadsheet of accounts and balances for that date. "
+            "Add or remove accounts, change figures, and watch Overview update from "
+            "the draft.",
         ),
         (
             "04",
-            "Income",
-            "Add a fixed source for salary or a retainer (yearly or monthly). "
-            "Use variable sources for freelance or gigs, and log receipts when "
-            "you are paid. You do not need every bank movement.",
+            "Save snapshot",
+            "When every active account has a balance and the charts look right, "
+            "click Save snapshot. That commits the date and returns you to view mode. "
+            "Discard clears the draft without changing history.",
         ),
         (
             "05",
-            "Check Overview",
-            "Net worth, tax-year progress, and income by source appear once "
-            "accounts, snapshots, and income exist. Allowances update when you "
-            "log contribution transactions.",
+            "Income and extras",
+            "While a session is open you can also log income, holdings, and recurring "
+            "items. Tax & tools stay available any time.",
         ),
         (
             "06",
-            "Optional layers",
-            "Holdings for investments you want named. Recurring for subscriptions "
-            "and standing orders. Tax & tools for England calculators. Export from "
-            "View data when you want a CSV backup.",
+            "Routine",
+            "Start a new snapshot when balances change (for example month-end). "
+            "Export from View data when you want a CSV backup.",
         ),
     ]
 
@@ -99,11 +96,10 @@ def _getting_started() -> None:
 
     with ui.element("div").classes("guide-callout"):
         ui.html(
-            "<strong>Routine</strong>"
-            "<p>Update balances when something material changes, or on a fixed "
-            "cadence (for example month-end). Log variable income when paid. "
-            "Record a pay change when salary moves in the same role; do not invent "
-            "a second job source for a rise.</p>",
+            "<strong>Draft sessions</strong>"
+            "<p>Closing the app mid-session keeps the draft. Reopen the profile and "
+            "continue, or discard. Incomplete balances cannot be saved. Pay rises "
+            "still use Record a pay change on the Income tab inside a session.</p>",
             sanitize=False,
         )
 
@@ -118,9 +114,9 @@ def _how_it_works() -> None:
         ),
         (
             "Snapshots",
-            "A snapshot is every account balance you recorded for one date. "
-            "View data groups by date for that reason. Saving on Edit data writes "
-            "one line per account you filled in.",
+            "A committed snapshot is every account balance for one date, written "
+            "when you Save snapshot. Until then, changes live in an autosaved draft "
+            "that overlays Overview and wealth charts.",
         ),
         (
             "Fixed income",

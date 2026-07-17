@@ -50,7 +50,47 @@ def _signed_balance(account: Account, balance: float) -> float:
     return balance
 
 
+def _draft_wealth_overlay() -> dict[str, Any] | None:
+    """If a draft session is open, compute assets/debts from the draft sheet."""
+    from finance_app.services import draft_session
+
+    state = draft_session.effective_accounts_and_balances()
+    if state is None:
+        return None
+    assets = 0.0
+    debts = 0.0
+    allocation: dict[AccountType, float] = defaultdict(float)
+    for row in state["rows"]:
+        if row["balance"] is None:
+            continue
+        balance = float(row["balance"])
+        try:
+            atype = AccountType(row["account_type"])
+        except ValueError:
+            atype = AccountType.OTHER
+        allocation[atype] += abs(balance)
+        if atype in LIABILITY_TYPES:
+            debts += abs(balance)
+        else:
+            assets += balance
+    return {
+        "assets": assets,
+        "debts": debts,
+        "net_worth": assets - debts,
+        "as_of_date": state["as_of_date"],
+        "allocation": allocation,
+        "draft": True,
+    }
+
+
 def assets_and_debts() -> dict[str, float]:
+    overlay = _draft_wealth_overlay()
+    if overlay is not None:
+        return {
+            "assets": overlay["assets"],
+            "debts": overlay["debts"],
+            "net_worth": overlay["net_worth"],
+        }
     with get_session() as session:
         accounts = {
             a.id: a for a in session.scalars(select(Account).where(Account.active)).all()
@@ -74,12 +114,26 @@ def net_worth() -> float:
 
 
 def allocation_by_account_type() -> list[dict[str, Any]]:
+    overlay = _draft_wealth_overlay()
+    if overlay is not None:
+        totals: dict[AccountType, float] = overlay["allocation"]
+        return [
+            {
+                "type": account_type.value,
+                "label": ACCOUNT_TYPE_LABELS[account_type],
+                "value": value,
+                "is_liability": account_type in LIABILITY_TYPES,
+            }
+            for account_type, value in sorted(
+                totals.items(), key=lambda item: item[1], reverse=True
+            )
+        ]
     with get_session() as session:
         accounts = {
             a.id: a for a in session.scalars(select(Account).where(Account.active)).all()
         }
         latest = _latest_balances(session)
-        totals: dict[AccountType, float] = defaultdict(float)
+        totals = defaultdict(float)
         for account_id, (_, balance) in latest.items():
             account = accounts.get(account_id)
             if account is None:
@@ -118,7 +172,19 @@ def net_worth_series() -> list[dict[str, Any]]:
                     continue
                 total += _signed_balance(account, balance)
             series.append({"date": as_of.isoformat(), "value": float(total)})
-        return series
+
+    overlay = _draft_wealth_overlay()
+    if overlay is not None:
+        point = {
+            "date": overlay["as_of_date"].isoformat(),
+            "value": float(overlay["net_worth"]),
+        }
+        if series and series[-1]["date"] == point["date"]:
+            series[-1] = point
+        else:
+            series.append(point)
+            series.sort(key=lambda item: item["date"])
+    return series
 
 
 def account_balance_series() -> dict[str, list[dict[str, Any]]]:
@@ -133,7 +199,23 @@ def account_balance_series() -> dict[str, list[dict[str, Any]]]:
             series[name].append(
                 {"date": row.as_of_date.isoformat(), "value": row.balance}
             )
-        return dict(series)
+
+    from finance_app.services import draft_session
+
+    state = draft_session.effective_accounts_and_balances()
+    if state is not None:
+        as_of = state["as_of_date"].isoformat()
+        for row in state["rows"]:
+            if row["balance"] is None:
+                continue
+            name = row["name"]
+            points = series.setdefault(name, [])
+            if points and points[-1]["date"] == as_of:
+                points[-1] = {"date": as_of, "value": float(row["balance"])}
+            else:
+                points.append({"date": as_of, "value": float(row["balance"])})
+                points.sort(key=lambda item: item["date"])
+    return dict(series)
 
 
 def tax_year_transaction_totals(
@@ -223,6 +305,7 @@ def tax_year_progress(on: date | None = None) -> dict[str, Any]:
 
 
 def overview_metrics() -> dict[str, Any]:
+    from finance_app.services import draft_session
     from finance_app.services import income as income_service
 
     totals = tax_year_transaction_totals()
@@ -231,6 +314,7 @@ def overview_metrics() -> dict[str, Any]:
     wealth = assets_and_debts()
     recurring = recurring_service.recurring_monthly_totals()
     income = income_service.income_by_source()
+    draft_meta = draft_session.get_draft_meta()
     return {
         "net_worth": wealth["net_worth"],
         "assets": wealth["assets"],
@@ -250,4 +334,6 @@ def overview_metrics() -> dict[str, Any]:
         "net_worth_change": net_worth_change(),
         "tax_year_progress": tax_year_progress(),
         "income_by_source": income,
+        "draft_active": draft_meta is not None,
+        "draft_as_of": draft_meta["as_of_date"].isoformat() if draft_meta else None,
     }

@@ -33,6 +33,12 @@ def register() -> None:
                 "Overview",
                 f"Tax year {data['tax_year_start']} to {data['tax_year_end']}.",
             )
+            if data.get("draft_active"):
+                ui.html(
+                    f'<div class="draft-banner">Showing draft overlay for snapshot '
+                    f'{data.get("draft_as_of")}. Save or discard from the bar above.</div>',
+                    sanitize=False,
+                )
 
             with ui.element("div").classes("hero-metrics"):
                 with ui.element("div").classes("hero-networth"):

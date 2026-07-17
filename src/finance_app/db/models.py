@@ -324,6 +324,66 @@ class HoldingSnapshot(Base):
     holding: Mapped[Holding] = relationship(back_populates="snapshots")
 
 
+class SnapshotDraft(Base):
+    """At most one open editing session per profile database."""
+
+    __tablename__ = "snapshot_drafts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    as_of_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    accounts: Mapped[list[SnapshotDraftAccount]] = relationship(
+        back_populates="draft", cascade="all, delete-orphan"
+    )
+    balances: Mapped[list[SnapshotDraftBalance]] = relationship(
+        back_populates="draft", cascade="all, delete-orphan"
+    )
+
+
+class SnapshotDraftAccount(Base):
+    """Pending account create / update / deactivate within a draft session."""
+
+    __tablename__ = "snapshot_draft_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    draft_id: Mapped[int] = mapped_column(
+        ForeignKey("snapshot_drafts.id"), nullable=False
+    )
+    op: Mapped[str] = mapped_column(String(16), nullable=False)  # create|update|deactivate
+    temp_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    account_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    account_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    draft: Mapped[SnapshotDraft] = relationship(back_populates="accounts")
+
+
+class SnapshotDraftBalance(Base):
+    """Pending balance for an existing account or a draft-created account."""
+
+    __tablename__ = "snapshot_draft_balances"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    draft_id: Mapped[int] = mapped_column(
+        ForeignKey("snapshot_drafts.id"), nullable=False
+    )
+    account_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    temp_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    balance: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    draft: Mapped[SnapshotDraft] = relationship(back_populates="balances")
+
+
 class RecurringItem(Base):
     """Subscriptions, standing orders, and recurring income."""
 

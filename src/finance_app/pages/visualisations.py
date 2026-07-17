@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from nicegui import ui
 
 from finance_app.pages.layout import render_shell, require_profile
+from finance_app.services import draft_session
 from finance_app.services import income as income_service
 from finance_app.services import metrics as metrics_service
 from finance_app.ui.charts import (
@@ -30,6 +31,17 @@ def register() -> None:
                 "Visualisations",
                 "Flows, composition, and trends — beyond plain bars where they help.",
             )
+            draft_meta = draft_session.get_draft_meta()
+            if draft_meta is not None:
+                as_of = draft_meta["as_of_date"]
+                as_of_text = (
+                    as_of.isoformat() if hasattr(as_of, "isoformat") else str(as_of)
+                )
+                ui.html(
+                    f'<div class="draft-banner">Showing draft overlay for snapshot '
+                    f"{as_of_text}. Wealth charts include unsaved balances.</div>",
+                    sanitize=False,
+                )
 
             income = income_service.income_by_source()
             _income_sankey(income)

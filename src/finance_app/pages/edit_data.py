@@ -7,25 +7,22 @@ from datetime import date
 from nicegui import ui
 
 from finance_app.db.models import (
-    ACCESS_TYPE_LABELS,
     ACCOUNT_TYPE_LABELS,
     FREQUENCY_LABELS,
     INCOME_CADENCE_LABELS,
     INCOME_CATEGORY_LABELS,
-    INTEREST_FREQUENCY_LABELS,
     RECURRING_KIND_LABELS,
     TRANSACTION_TYPE_LABELS,
-    AccessType,
     AccountType,
     Frequency,
     IncomeCadence,
     IncomeCategory,
-    InterestFrequency,
     RecurringKind,
     TransactionType,
 )
-from finance_app.pages.layout import render_shell, require_profile
+from finance_app.pages.layout import render_shell, require_draft_session, require_profile
 from finance_app.services import accounts as account_service
+from finance_app.services import draft_session
 from finance_app.services import income as income_service
 from finance_app.services import recurring as recurring_service
 from finance_app.services import snapshots as snapshot_service
@@ -39,37 +36,223 @@ def register() -> None:
             return
 
         with render_shell("/edit"):
+            if not require_draft_session():
+                page_header(
+                    "Edit data",
+                    "Editing opens inside a snapshot session so changes can be "
+                    "reviewed on Overview before you commit.",
+                )
+                _no_session_gate()
+                return
+
             page_header(
                 "Edit data",
-                "Accounts, income sources (salary / freelance / gigs), holdings, "
-                "snapshots, subscriptions and standing orders.",
+                "Draft session. Balances autosave. Commit with Save snapshot above.",
             )
 
-            with ui.tabs().classes("w-full") as tabs:
-                tab_income = ui.tab("Income")
-                tab_accounts = ui.tab("Accounts")
-                tab_holdings = ui.tab("Holdings")
-                tab_txns = ui.tab("Transactions")
-                tab_snaps = ui.tab("Snapshots")
-                tab_recurring = ui.tab("Recurring")
+            with ui.element("div").classes("session-sheet"):
+                with ui.tabs().classes("w-full session-tabs").props(
+                    "dense outside-arrows mobile-arrows"
+                ) as tabs:
+                    tab_balances = ui.tab("Balances")
+                    tab_income = ui.tab("Income")
+                    tab_holdings = ui.tab("Holdings")
+                    tab_txns = ui.tab("Transactions")
+                    tab_snaps = ui.tab("History")
+                    tab_recurring = ui.tab("Recurring")
 
-            with ui.tab_panels(tabs, value=tab_income).classes("w-full"):
-                with ui.tab_panel(tab_income):
-                    _income_panel()
-                with ui.tab_panel(tab_accounts):
-                    _accounts_panel()
-                with ui.tab_panel(tab_holdings):
-                    _holdings_panel()
-                with ui.tab_panel(tab_txns):
-                    _transactions_panel()
-                with ui.tab_panel(tab_snaps):
-                    _snapshots_panel()
-                with ui.tab_panel(tab_recurring):
-                    _recurring_panel()
+                with ui.tab_panels(tabs, value=tab_balances).classes(
+                    "w-full session-tab-panels"
+                ):
+                    with ui.tab_panel(tab_balances):
+                        _balances_panel()
+                    with ui.tab_panel(tab_income):
+                        _income_panel()
+                    with ui.tab_panel(tab_holdings):
+                        _holdings_panel()
+                    with ui.tab_panel(tab_txns):
+                        _transactions_panel()
+                    with ui.tab_panel(tab_snaps):
+                        _snapshots_panel()
+                    with ui.tab_panel(tab_recurring):
+                        _recurring_panel()
 
 
 def _refresh() -> None:
     ui.navigate.to("/edit")
+
+
+def _no_session_gate() -> None:
+    with ui.element("div").classes("panel"):
+        ui.html('<h2 class="panel-title">No snapshot session open</h2>', sanitize=False)
+        ui.label(
+            "Start a new snapshot from the bar at the top of any page. "
+            "That unlocks this spreadsheet and other edit tabs, autosaves your work, "
+            "and lets Overview reflect the draft until you save or discard."
+        ).style("color: var(--text-muted); margin-bottom: 1rem; max-width: 40rem;")
+        ui.button(
+            "Go to Overview",
+            on_click=lambda: ui.navigate.to("/"),
+        ).props("flat")
+
+
+def _balances_panel() -> None:
+    state = draft_session.effective_accounts_and_balances()
+    meta = draft_session.get_draft_meta()
+    if state is None or meta is None:
+        ui.label("No draft session.")
+        return
+
+    as_of = meta["as_of_date"]
+    as_of_text = as_of.isoformat() if hasattr(as_of, "isoformat") else str(as_of)
+    type_options = {t.value: label for t, label in ACCOUNT_TYPE_LABELS.items()}
+
+    with ui.element("div").classes("sheet-toolbar"):
+        ui.html(
+            f"<div><strong>As of {as_of_text}</strong>"
+            "<span>Edit cells to autosave. Every row needs a balance to commit.</span></div>",
+            sanitize=False,
+        )
+        with ui.element("div").classes("sheet-toolbar-right"):
+
+            def open_date_dialog() -> None:
+                with ui.dialog() as dialog, ui.card().classes("sheet-date-dialog"):
+                    ui.label("Change snapshot date").classes("sheet-date-dialog-title")
+                    picker = ui.date(value=as_of_text).classes("sheet-date-picker")
+
+                    def apply_date() -> None:
+                        raw = picker.value or as_of_text
+                        parsed = date.fromisoformat(str(raw)[:10])
+                        dialog.close()
+                        if parsed == as_of:
+                            return
+                        draft_session.set_as_of_date(parsed)
+                        _refresh()
+
+                    with ui.row().classes("w-full justify-end gap-2"):
+                        ui.button("Cancel", on_click=dialog.close).props("flat")
+                        ui.button("Apply", on_click=apply_date).props(
+                            "color=primary unelevated"
+                        )
+                dialog.open()
+
+            ui.button(
+                icon="edit_calendar",
+                on_click=open_date_dialog,
+            ).props("flat dense round").classes("sheet-date-btn").tooltip(
+                "Change snapshot date"
+            )
+
+    with ui.element("div").classes("sheet-grid-wrap"):
+        with ui.element("table").classes("sheet-table"):
+            with ui.element("thead"):
+                with ui.element("tr"):
+                    with ui.element("th").classes("sheet-th"):
+                        ui.label("Account")
+                    with ui.element("th").classes("sheet-th"):
+                        ui.label("Type")
+                    with ui.element("th").classes("sheet-th sheet-th-num"):
+                        ui.label("Balance (£)")
+                    ui.element("th").classes("sheet-th sheet-th-action")
+            with ui.element("tbody"):
+                for row in state["rows"]:
+                    with ui.element("tr").classes("sheet-tr"):
+                        with ui.element("td").classes("sheet-td"):
+                            name_input = ui.input(value=row["name"]).props(
+                                "borderless dense hide-bottom-space"
+                            ).classes("sheet-input")
+
+                            def make_rename(r=row, widget=name_input):
+                                def on_blur() -> None:
+                                    new_name = (widget.value or "").strip()
+                                    if not new_name or new_name == r["name"]:
+                                        return
+                                    try:
+                                        draft_session.rename_draft_row(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            name=new_name,
+                                        )
+                                    except ValueError as exc:
+                                        ui.notify(str(exc), type="warning")
+
+                                return on_blur
+
+                            name_input.on("blur", make_rename())
+
+                        with ui.element("td").classes("sheet-td sheet-td-muted"):
+                            badge = "New · " if row["is_new"] else ""
+                            debt = " owed" if row["is_liability"] else ""
+                            ui.label(f"{badge}{row['account_type_label']}{debt}")
+
+                        with ui.element("td").classes("sheet-td sheet-td-num"):
+                            bal_input = ui.number(
+                                value=row["balance"],
+                                format="%.2f",
+                            ).props(
+                                "borderless dense hide-bottom-space "
+                                "input-class=text-right"
+                            ).classes("sheet-input sheet-balance")
+
+                            def make_save(r=row, widget=bal_input):
+                                def on_change() -> None:
+                                    raw = widget.value
+                                    amount = None if raw in (None, "") else float(raw)
+                                    draft_session.set_balance(
+                                        balance=amount,
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                    )
+
+                                return on_change
+
+                            bal_input.on("blur", make_save())
+
+                        with ui.element("td").classes("sheet-td sheet-td-action"):
+
+                            def make_remove(r=row):
+                                def remove() -> None:
+                                    draft_session.deactivate_draft_account(
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                    )
+                                    _refresh()
+
+                                return remove
+
+                            ui.button(icon="close", on_click=make_remove()).props(
+                                "flat dense round size=md"
+                            ).classes("sheet-remove")
+
+    missing = draft_session.missing_balances()
+    if missing:
+        ui.label(f"{len(missing)} balance(s) still empty").classes("sheet-warn")
+
+    with ui.element("div").classes("sheet-add"):
+        with ui.row().classes("w-full items-end gap-2 flex-wrap no-wrap-md"):
+            new_name = ui.input("Name").props("dense").classes("sheet-add-field grow")
+            new_type = ui.select(
+                type_options, value=AccountType.SAVINGS.value, label="Type"
+            ).props("dense").classes("sheet-add-field")
+            new_bal = ui.number("Balance (£)", value=None, format="%.2f").props(
+                "dense"
+            ).classes("sheet-add-field")
+
+            def add_row() -> None:
+                if not (new_name.value or "").strip():
+                    ui.notify("Name is required", type="warning")
+                    return
+                opening = None
+                if new_bal.value not in (None, ""):
+                    opening = float(new_bal.value)
+                draft_session.add_draft_account(
+                    new_name.value,
+                    new_type.value,
+                    opening_balance=opening,
+                )
+                _refresh()
+
+            ui.button("Add", on_click=add_row).props("color=primary unelevated dense")
 
 
 def _income_panel() -> None:
@@ -105,7 +288,7 @@ def _income_panel() -> None:
                 period = ui.toggle(
                     {"yearly": "Yearly", "monthly": "Monthly"},
                     value="yearly",
-                ).props("unelevated toggle-color=primary")
+                ).classes("sheet-toggle").props("unelevated toggle-color=primary")
                 expected = ui.number(
                     "Expected amount (£)",
                     value=None,
@@ -181,7 +364,7 @@ def _income_panel() -> None:
                 pay_period = ui.toggle(
                     {"yearly": "Yearly", "monthly": "Monthly"},
                     value="yearly",
-                ).props("unelevated toggle-color=primary")
+                ).classes("sheet-toggle").props("unelevated toggle-color=primary")
                 pay_amount = ui.number(
                     "New expected amount (£)", value=None, format="%.2f"
                 ).classes("w-full")
@@ -392,137 +575,6 @@ def _income_panel() -> None:
         table.on("remove", remove_receipt)
 
 
-def _parse_optional_date(value) -> date | None:
-    if not value:
-        return None
-    if isinstance(value, str):
-        return date.fromisoformat(value[:10])
-    if isinstance(value, date):
-        return value
-    return None
-
-
-def _accounts_panel() -> None:
-    accounts = account_service.list_accounts()
-    type_options = {t.value: label for t, label in ACCOUNT_TYPE_LABELS.items()}
-    freq_options = {f.value: label for f, label in INTEREST_FREQUENCY_LABELS.items()}
-    access_options = {a.value: label for a, label in ACCESS_TYPE_LABELS.items()}
-
-    with ui.element("div").classes("panel"):
-        ui.html('<h2 class="panel-title">Add account or debt</h2>', sanitize=False)
-        ui.label(
-            "Leave banking/rate fields blank when they do not apply "
-            "(e.g. pensions, credit cards)."
-        ).style("color: var(--text-muted); margin-bottom: 0.75rem;")
-        with ui.element("div").classes("form-stack"):
-            name = ui.input("Name").classes("w-full")
-            account_type = ui.select(
-                type_options, value=AccountType.SAVINGS.value, label="Type"
-            ).classes("w-full")
-            provider = ui.input("Provider / bank").classes("w-full")
-            account_number = ui.input("Account number").classes("w-full")
-            sort_code = ui.input("Sort code", placeholder="12-34-56").classes("w-full")
-            rate = ui.number(
-                "Interest rate % (AER / gross)", value=None, format="%.2f"
-            ).classes("w-full")
-            interest_frequency = ui.select(
-                freq_options,
-                value=InterestFrequency.MONTHLY.value,
-                label="Interest paid",
-            ).classes("w-full")
-            access_type = ui.select(
-                access_options,
-                value=AccessType.EASY_ACCESS.value,
-                label="Access / rate type",
-            ).classes("w-full")
-            notice_days = ui.number("Notice days (if notice account)", value=None).classes(
-                "w-full"
-            )
-            maturity = ui.input(
-                "Maturity / fixed-term end (YYYY-MM-DD, optional)"
-            ).classes("w-full")
-            opened = ui.input("Opened date (YYYY-MM-DD, optional)").classes("w-full")
-            notes = ui.textarea("Notes").classes("w-full")
-
-            def add_account() -> None:
-                if not (name.value or "").strip():
-                    ui.notify("Name is required", type="warning")
-                    return
-                account_service.create_account(
-                    name.value,
-                    account_type.value,
-                    provider=provider.value or None,
-                    account_number=account_number.value or None,
-                    sort_code=sort_code.value or None,
-                    interest_rate_pct=float(rate.value)
-                    if rate.value not in (None, "")
-                    else None,
-                    interest_frequency=interest_frequency.value,
-                    access_type=access_type.value,
-                    notice_days=int(notice_days.value)
-                    if notice_days.value not in (None, "")
-                    else None,
-                    maturity_date=_parse_optional_date(maturity.value),
-                    opened_date=_parse_optional_date(opened.value),
-                    notes=notes.value or None,
-                )
-                ui.notify("Account added", type="positive")
-                _refresh()
-
-            with ui.element("div").classes("form-actions"):
-                ui.button("Add account", on_click=add_account)
-
-    with ui.element("div").classes("panel"):
-        ui.html('<h2 class="panel-title">Accounts</h2>', sanitize=False)
-        if not accounts:
-            ui.label("No accounts yet.")
-            return
-        columns = [
-            {"name": "name", "label": "Name", "field": "name"},
-            {"name": "type", "label": "Type", "field": "type"},
-            {"name": "provider", "label": "Provider", "field": "provider"},
-            {"name": "rate", "label": "Rate %", "field": "rate"},
-            {"name": "access", "label": "Access", "field": "access"},
-            {"name": "maturity", "label": "Maturity", "field": "maturity"},
-            {"name": "kind", "label": "Kind", "field": "kind"},
-            {"name": "actions", "label": "", "field": "actions"},
-        ]
-        rows = [
-            {
-                "id": a.id,
-                "name": a.name,
-                "type": ACCOUNT_TYPE_LABELS.get(a.account_type, a.account_type.value),
-                "provider": a.provider or "",
-                "rate": f"{a.interest_rate_pct:.2f}"
-                if a.interest_rate_pct is not None
-                else "—",
-                "access": ACCESS_TYPE_LABELS.get(a.access_type, "—")
-                if a.access_type
-                else "—",
-                "maturity": a.maturity_date.isoformat() if a.maturity_date else "—",
-                "kind": "Debt" if a.is_liability else "Asset",
-            }
-            for a in accounts
-        ]
-        table = ui.table(columns=columns, rows=rows, row_key="id").classes("w-full")
-
-        def deactivate(e) -> None:
-            account_service.update_account(e.args["id"], active=False)
-            ui.notify("Account deactivated", type="info")
-            _refresh()
-
-        table.add_slot(
-            "body-cell-actions",
-            r'''
-            <q-td :props="props">
-              <q-btn dense flat label="Deactivate" color="warning"
-                     @click="() => $parent.$emit('deactivate', props.row)" />
-            </q-td>
-            ''',
-        )
-        table.on("deactivate", deactivate)
-
-
 def _holdings_panel() -> None:
     accounts = account_service.list_accounts(active_only=True)
     account_options = {str(a.id): a.name for a in accounts}
@@ -686,55 +738,6 @@ def _transactions_panel() -> None:
 
 
 def _snapshots_panel() -> None:
-    accounts = account_service.list_accounts(active_only=True)
-
-    with ui.element("div").classes("panel"):
-        ui.html(
-            '<h2 class="panel-title">Record balances as of a date</h2>',
-            sanitize=False,
-        )
-        ui.label(
-            "For credit cards, loans and mortgages, enter the amount still owed."
-        ).style("color: var(--text-muted); margin-bottom: 0.75rem;")
-        with ui.element("div").classes("form-stack"):
-            as_of = ui.date_input("As of date", value=date.today()).classes("w-full")
-            inputs: dict[int, ui.number] = {}
-            if not accounts:
-                ui.label("Create an account first.")
-            else:
-                for account in accounts:
-                    label = account.name
-                    if account.is_liability:
-                        label = f"{account.name} (owed £)"
-                    else:
-                        label = f"{account.name} (£)"
-                    inputs[account.id] = ui.number(
-                        label, value=None, format="%.2f"
-                    ).classes("w-full")
-
-                def save_snapshots() -> None:
-                    raw_date = as_of.value or date.today()
-                    if isinstance(raw_date, str):
-                        as_of_date = date.fromisoformat(raw_date[:10])
-                    else:
-                        as_of_date = raw_date
-                    balances: dict[int, float] = {}
-                    for account_id, widget in inputs.items():
-                        if widget.value is None or widget.value == "":
-                            continue
-                        balances[account_id] = float(widget.value)
-                    if not balances:
-                        ui.notify("Enter at least one balance", type="warning")
-                        return
-                    count = snapshot_service.record_balances_for_date(
-                        as_of_date, balances
-                    )
-                    ui.notify(f"Saved {count} snapshot(s)", type="positive")
-                    _refresh()
-
-                with ui.element("div").classes("form-actions"):
-                    ui.button("Save snapshots", on_click=save_snapshots)
-
     snaps = snapshot_service.list_balance_snapshots(limit=500)
     account_names = {a.id: a.name for a in account_service.list_accounts()}
     by_date: dict[date, list] = {}
@@ -742,40 +745,80 @@ def _snapshots_panel() -> None:
         by_date.setdefault(snap.as_of_date, []).append(snap)
 
     with ui.element("div").classes("panel"):
-        ui.html('<h2 class="panel-title">Recent balance snapshots</h2>', sanitize=False)
+        ui.html('<h2 class="panel-title">Committed snapshots</h2>', sanitize=False)
         ui.label(
-            "Each date is one snapshot. Expand a date to edit or delete individual lines."
-        ).style("color: var(--text-muted); margin-bottom: 0.75rem;")
+            "Balances for a new date are edited on Balances, then Save snapshot. "
+            "Expand a date below to delete individual account balances."
+        ).classes("sheet-help")
+
         if not by_date:
-            ui.label("No snapshots yet.")
+            ui.label("No committed snapshots yet.")
             return
 
-        for as_of, lines in sorted(by_date.items(), key=lambda item: item[0], reverse=True)[
-            :12
-        ]:
-            total = sum(line.balance for line in lines)
-            with ui.expansion(
-                f"{as_of.isoformat()} · {len(lines)} accounts · {format_gbp(total)}"
-            ).classes("w-full"):
-                columns = [
-                    {"name": "account", "label": "Account", "field": "account"},
-                    {"name": "balance", "label": "Balance", "field": "balance"},
-                    {"name": "actions", "label": "", "field": "actions"},
-                ]
+        summary_rows = []
+        detail_by_date: dict[str, list] = {}
+        for as_of, lines in sorted(by_date.items(), key=lambda item: item[0], reverse=True):
+            key = as_of.isoformat()
+            summary_rows.append(
+                {
+                    "date": key,
+                    "accounts": len(lines),
+                    "total": format_gbp(sum(line.balance for line in lines)),
+                }
+            )
+            detail_by_date[key] = sorted(
+                lines, key=lambda s: account_names.get(s.account_id, "")
+            )
+
+        ui.table(
+            columns=[
+                {"name": "date", "label": "Date", "field": "date", "align": "left"},
+                {
+                    "name": "accounts",
+                    "label": "Accounts",
+                    "field": "accounts",
+                    "align": "left",
+                },
+                {"name": "total", "label": "Total", "field": "total", "align": "left"},
+            ],
+            rows=summary_rows[:20],
+            row_key="date",
+            pagination={"rowsPerPage": 10},
+        ).classes("w-full sheet-history-summary")
+
+        for key, lines in list(detail_by_date.items())[:12]:
+            count = len(lines)
+            account_word = "account" if count == 1 else "accounts"
+            with ui.expansion(f"{key} · {count} {account_word}").classes(
+                "w-full sheet-history-exp"
+            ):
                 rows = [
                     {
                         "id": s.id,
                         "account": account_names.get(s.account_id, str(s.account_id)),
                         "balance": format_gbp(s.balance),
                     }
-                    for s in sorted(
-                        lines,
-                        key=lambda s: account_names.get(s.account_id, ""),
-                    )
+                    for s in lines
                 ]
-                table = ui.table(columns=columns, rows=rows, row_key="id").classes(
-                    "w-full"
-                )
+                table = ui.table(
+                    columns=[
+                        {
+                            "name": "account",
+                            "label": "Account",
+                            "field": "account",
+                            "align": "left",
+                        },
+                        {
+                            "name": "balance",
+                            "label": "Balance",
+                            "field": "balance",
+                            "align": "left",
+                        },
+                        {"name": "actions", "label": "", "field": "actions"},
+                    ],
+                    rows=rows,
+                    row_key="id",
+                ).classes("w-full")
 
                 def remove(e) -> None:
                     snapshot_service.delete_balance_snapshot(e.args["id"])

@@ -522,13 +522,542 @@ body, .q-page, .nicegui-content {
   margin-top: 0.15rem;
 }
 
-.q-btn--standard.bg-primary {
+.q-btn.bg-primary,
+.q-btn--standard.bg-primary,
+.q-btn--unelevated.bg-primary {
   background: var(--accent) !important;
+  color: #1a1418 !important;
+}
+
+.q-btn.bg-primary .q-btn__content,
+.q-btn--unelevated.bg-primary .q-btn__content,
+.q-btn-group .q-btn.bg-primary,
+.q-btn-group .q-btn.bg-primary .q-btn__content,
+.q-btn-toggle .q-btn.bg-primary,
+.q-btn-toggle .q-btn.bg-primary .q-btn__content {
   color: #1a1418 !important;
 }
 
 .q-tab--active .q-tab__indicator {
   background: var(--accent-2) !important;
+}
+
+/* Snapshot session bar */
+.session-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.7rem clamp(1rem, 3vw, 2rem);
+  border-bottom: 1px solid var(--border);
+  background: rgba(26, 34, 45, 0.92);
+}
+
+.session-bar-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 0.75rem;
+}
+
+.session-bar-badge {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--accent);
+  margin-right: 0.75rem;
+}
+
+.session-bar-hint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.session-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55rem 0.75rem;
+}
+
+.session-bar-actions .session-date {
+  min-width: 10rem;
+}
+
+/* Spreadsheet / ledger edit surface */
+.session-sheet {
+  --sheet-bg: #cfd6e0;
+  --sheet-header: #b4bfcc;
+  --sheet-row: #e6ebf1;
+  --sheet-row-alt: #d8e0e9;
+  --sheet-ink: #141a22;
+  --sheet-muted: #3d4a58;
+  --sheet-line: #3d4a58;
+  --sheet-border: 1px solid #3d4a58;
+  --text-muted: #3d4a58;
+  --text: #141a22;
+  --q-primary: #f4b6c8;
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem 0.9rem;
+  background: var(--sheet-bg);
+  border: var(--sheet-border);
+  color: var(--sheet-ink);
+}
+
+/* Defeat Quasar dark-mode white icons inside the light sheet */
+.body--dark .session-sheet .q-icon,
+.session-sheet .q-icon,
+.session-sheet i.q-icon,
+.session-sheet .material-icons,
+.session-sheet .q-field__append,
+.session-sheet .q-field__prepend {
+  color: #f4b6c8 !important;
+  opacity: 1 !important;
+}
+
+.body--dark .session-sheet .sheet-remove .q-icon,
+.session-sheet .sheet-remove .q-icon,
+.session-sheet .sheet-remove.q-btn {
+  color: #1c2430 !important;
+}
+
+.session-sheet .session-tabs,
+.session-sheet .session-tabs.q-tabs {
+  background: var(--sheet-header) !important;
+  border-radius: 8px 8px 0 0;
+  padding: 0;
+  border: var(--sheet-border);
+  box-shadow: none !important;
+}
+
+.session-sheet .q-tabs__content {
+  gap: 0;
+  border: none !important;
+}
+
+/* Tab scroll chevrons (often white in dark mode) */
+.session-sheet .q-tabs__arrow,
+.session-sheet .q-tabs__arrow .q-icon,
+.body--dark .session-sheet .q-tabs__arrow,
+.body--dark .session-sheet .q-tabs__arrow .q-icon {
+  color: #f4b6c8 !important;
+  background: var(--sheet-header) !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+.session-sheet .q-tab {
+  color: var(--sheet-muted) !important;
+  min-height: 2.5rem;
+  padding: 0 0.95rem;
+  text-transform: none;
+  font-weight: 600;
+  border-right: var(--sheet-border);
+  border-radius: 0 !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+.session-sheet .q-tab:last-child {
+  border-right: none;
+}
+
+.session-sheet .q-tab--active {
+  color: var(--sheet-ink) !important;
+  background: var(--sheet-row) !important;
+}
+
+.session-sheet .q-tab__indicator {
+  display: none !important;
+}
+
+.session-sheet .session-tab-panels,
+.session-sheet .q-tab-panels,
+.session-sheet .q-panel,
+.session-sheet .q-tab-panel {
+  background: transparent !important;
+  color: var(--sheet-ink) !important;
+  padding-top: 0.75rem;
+}
+
+.session-sheet .panel {
+  background: var(--sheet-row) !important;
+  border: var(--sheet-border);
+  color: var(--sheet-ink) !important;
+  box-shadow: none !important;
+  border-radius: 8px;
+}
+
+.session-sheet .panel-title {
+  color: var(--sheet-ink) !important;
+  font-size: 1.05rem;
+  margin-bottom: 0.65rem;
+}
+
+.session-sheet .panel .q-field__label,
+.session-sheet .panel .q-field__native,
+.session-sheet .panel .q-field__prefix,
+.session-sheet .panel .q-field__suffix,
+.session-sheet .panel .q-field__input,
+.session-sheet label,
+.session-sheet .nicegui-label {
+  color: var(--sheet-ink) !important;
+}
+
+/* Field underlines: solid black, same weight everywhere */
+.session-sheet .q-field__control:before,
+.session-sheet .q-field__control:after,
+.session-sheet .panel .q-field__control:before,
+.session-sheet .panel .q-field__control:after,
+.session-sheet .sheet-add .q-field__control:before,
+.session-sheet .sheet-add .q-field__control:after {
+  border-bottom: var(--sheet-border) !important;
+}
+
+/* Dropdown / select / date chevrons: accent pink (beat dark-mode white) */
+.body--dark .session-sheet .q-field__append .q-icon,
+.body--dark .session-sheet .q-select__dropdown-icon,
+.session-sheet .q-field__append .q-icon,
+.session-sheet .q-select .q-field__append .q-icon,
+.session-sheet .q-select__dropdown-icon,
+.session-sheet .q-icon.q-select__dropdown-icon,
+.session-sheet .q-field--auto-height .q-field__append .q-icon,
+.session-sheet .q-btn .q-icon {
+  color: #f4b6c8 !important;
+  opacity: 1 !important;
+}
+
+.body--dark .session-sheet .sheet-remove .q-icon,
+.session-sheet .sheet-remove .q-icon,
+.session-sheet .sheet-remove.q-btn .q-icon {
+  color: #1c2430 !important;
+}
+
+/* Opened select menus teleport to body — keep check icons pink */
+.q-menu .q-item__section--side .q-icon {
+  color: #f4b6c8 !important;
+}
+
+.session-sheet .q-table,
+.session-sheet .q-table__card,
+.session-sheet .q-markup-table {
+  background: var(--sheet-row) !important;
+  color: var(--sheet-ink) !important;
+  box-shadow: none !important;
+  border: var(--sheet-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.session-sheet .q-table thead tr,
+.session-sheet .q-table th {
+  background: var(--sheet-header) !important;
+  color: var(--sheet-ink) !important;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: left !important;
+}
+
+.session-sheet .q-table td,
+.session-sheet .q-table th {
+  background: transparent !important;
+  color: var(--sheet-ink) !important;
+  text-align: left !important;
+  border-color: var(--sheet-line) !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-sheet .q-table tbody tr:nth-child(even) td {
+  background: var(--sheet-row-alt) !important;
+}
+
+.session-sheet .q-table .q-btn {
+  color: #9a3b3b !important;
+}
+
+.sheet-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  background: var(--sheet-header);
+  border: var(--sheet-border);
+}
+
+.sheet-toolbar strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  margin-bottom: 0.1rem;
+  color: var(--sheet-ink);
+}
+
+.sheet-toolbar span {
+  color: var(--sheet-muted);
+  font-size: 0.85rem;
+}
+
+.sheet-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.sheet-date-btn,
+.session-sheet .sheet-date-btn.q-btn,
+.session-sheet .sheet-date-btn .q-icon {
+  color: #f4b6c8 !important;
+}
+
+/* Dialog teleports outside .session-sheet — use solid colours, not sheet variables */
+.sheet-date-dialog,
+.q-dialog .sheet-date-dialog.q-card {
+  background: #1a222d !important;
+  background-color: #1a222d !important;
+  color: #e8eef4 !important;
+  opacity: 1 !important;
+  min-width: 18rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(232, 238, 244, 0.16);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.sheet-date-dialog-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin-bottom: 0.65rem;
+  color: #e8eef4 !important;
+}
+
+.sheet-date-dialog .q-date {
+  background: #1a222d !important;
+  box-shadow: none !important;
+}
+
+.sheet-help {
+  color: var(--sheet-muted) !important;
+  margin: 0 0 0.85rem;
+  max-width: 42rem;
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.sheet-grid-wrap {
+  overflow-x: auto;
+  border: var(--sheet-border);
+  border-radius: 0;
+  background: var(--sheet-row);
+}
+
+.sheet-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.sheet-table col.account { width: 42%; }
+.sheet-table .sheet-th,
+.sheet-table .sheet-td {
+  border-bottom: var(--sheet-border);
+  border-right: var(--sheet-border);
+  vertical-align: middle;
+}
+
+.sheet-table .sheet-th:last-child,
+.sheet-table .sheet-td:last-child {
+  border-right: none;
+}
+
+.sheet-th {
+  padding: 0.5rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sheet-muted);
+  background: var(--sheet-header);
+  text-align: left;
+}
+
+.sheet-th .nicegui-label,
+.sheet-th label {
+  color: var(--sheet-muted) !important;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.sheet-th-num {
+  text-align: right;
+  width: 8.5rem;
+}
+
+.sheet-th-action {
+  width: 2.75rem;
+  padding: 0 !important;
+}
+
+.sheet-td {
+  padding: 0.1rem 0.35rem 0.1rem 0.5rem;
+  background: var(--sheet-row);
+  min-width: 0;
+}
+
+.sheet-tr:nth-child(even) .sheet-td {
+  background: var(--sheet-row-alt);
+}
+
+.sheet-td-muted {
+  color: var(--sheet-muted);
+  font-size: 0.88rem;
+  padding-left: 0.65rem !important;
+}
+
+.sheet-td-muted .nicegui-label {
+  color: var(--sheet-muted) !important;
+}
+
+.sheet-td-num {
+  width: 8.5rem;
+  text-align: right;
+}
+
+.sheet-td-action {
+  width: 2.75rem;
+  text-align: center;
+  padding: 0 !important;
+}
+
+.sheet-remove,
+.session-sheet .sheet-remove.q-btn,
+.session-sheet .sheet-remove .q-icon {
+  opacity: 1 !important;
+  color: #1c2430 !important;
+}
+
+.sheet-remove:hover,
+.session-sheet .sheet-remove.q-btn:hover,
+.session-sheet .sheet-remove:hover .q-icon {
+  color: #8b1e1e !important;
+  background: rgba(28, 36, 48, 0.08) !important;
+}
+
+.sheet-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.session-sheet .sheet-input .q-field__control {
+  background: transparent !important;
+  color: var(--sheet-ink) !important;
+  min-height: 2rem;
+}
+
+.session-sheet .sheet-input .q-field__native,
+.session-sheet .sheet-input input {
+  color: var(--sheet-ink) !important;
+  overflow: visible;
+}
+
+.session-sheet .sheet-td-num .q-field {
+  width: 100%;
+}
+
+.session-sheet .sheet-input .q-field--focused .q-field__control {
+  box-shadow: inset 0 0 0 2px rgba(196, 120, 140, 0.9);
+  border-radius: 3px;
+}
+
+.sheet-balance input {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-weight: 600;
+}
+
+.sheet-warn {
+  margin-top: 0.55rem;
+  color: #7a4e14;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.sheet-add {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: var(--sheet-row);
+  border: var(--sheet-border);
+}
+
+.session-sheet .sheet-add .q-field__append .q-icon {
+  color: var(--accent) !important;
+  opacity: 1 !important;
+}
+
+.sheet-add-field {
+  min-width: 8.5rem;
+  flex: 1 1 8.5rem;
+}
+
+.sheet-add-field.grow {
+  flex: 2 1 12rem;
+}
+
+.session-sheet .sheet-add .q-field__label,
+.session-sheet .sheet-add .q-field__native {
+  color: var(--sheet-ink) !important;
+}
+
+.session-sheet .sheet-toggle .q-btn.bg-primary,
+.session-sheet .sheet-toggle .q-btn.bg-primary .q-btn__content {
+  color: #1a1418 !important;
+  background: var(--accent) !important;
+}
+
+.session-sheet .sheet-toggle .q-btn:not(.bg-primary) {
+  color: var(--sheet-ink) !important;
+}
+
+.session-sheet .q-expansion-item,
+.session-sheet .q-expansion-item .q-item,
+.session-sheet .q-expansion-item .q-item__label,
+.session-sheet .sheet-history-exp .q-item__label {
+  color: var(--sheet-ink) !important;
+}
+
+.session-sheet .q-expansion-item {
+  border: var(--sheet-border);
+  border-radius: 0;
+  margin-top: 0.45rem;
+  background: rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+
+.session-sheet .q-expansion-item .q-icon,
+.session-sheet .q-expansion-item__toggle-icon {
+  color: var(--accent) !important;
+  opacity: 1 !important;
+}
+
+.session-sheet .sheet-history-summary {
+  margin-bottom: 0.75rem;
+}
+
+.draft-banner {
+  margin-bottom: 1rem;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(244, 182, 200, 0.35);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 0.92rem;
 }
 
 /* Guide */
