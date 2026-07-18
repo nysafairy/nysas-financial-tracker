@@ -18,6 +18,8 @@ NAV_ITEMS = [
     ("/view", "View data"),
     ("/edit", "Edit data"),
     ("/visualisations", "Visualisations"),
+    ("/forecasting", "Forecasting"),
+    ("/income-report", "Income report"),
     ("/tax", "Tax & tools"),
     ("/guide", "Guide"),
 ]
@@ -48,7 +50,8 @@ def _render_session_bar() -> None:
             ui.html(
                 '<span class="session-bar-label">View mode</span>'
                 "<span class=\"session-bar-hint\">"
-                "Charts and data are read-only until you start a snapshot session."
+                "Charts and data are read-only until you start a snapshot session. "
+                "To change a past date, start a session then use History → Edit this snapshot."
                 "</span>",
                 sanitize=False,
             )
@@ -141,7 +144,7 @@ def render_shell(active_path: str) -> Iterator[None]:
                     "color: var(--text-muted);"
                 )
                 ui.button(
-                    "Switch profile",
+                    "Manage profiles",
                     on_click=lambda: ui.navigate.to("/profiles"),
                 ).props("flat dense").classes("text-sm")
         _render_session_bar()

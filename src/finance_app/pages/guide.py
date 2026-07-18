@@ -50,20 +50,22 @@ def _getting_started() -> None:
             "01",
             "Profile",
             "Each profile is a separate local database. Use one profile per person "
-            "or household view you want kept apart.",
+            "or household view you want kept apart. Use Manage profiles to open, "
+            "rename, close, or delete a profile. Delete removes that folder permanently.",
         ),
         (
             "02",
             "Start a snapshot",
             "The app stays view-only until you click Start new snapshot in the bar "
-            "at the top. That opens an autosaved draft session.",
+            "at the top. That opens an autosaved draft session and unlocks Edit data.",
         ),
         (
             "03",
             "Balances sheet",
-            "Edit data opens on a spreadsheet of accounts and balances for that date. "
-            "Add or remove accounts, change figures, and watch Overview update from "
-            "the draft.",
+            "Edit the spreadsheet of accounts for that date: name, type, provider, "
+            "rates, access, bank details, notes, and balance. Add savings types such "
+            "as easy access, regular saver, fixed terms, or Premium Bonds. Overview "
+            "updates from the draft as you type.",
         ),
         (
             "04",
@@ -75,14 +77,28 @@ def _getting_started() -> None:
         (
             "05",
             "Income and extras",
-            "While a session is open you can also log income, holdings, and recurring "
-            "items. Tax & tools stay available any time.",
+            "While a session is open you can also log income and recurring items. "
+            "For fixed pay, Yearly/Monthly is only the unit you type; Paid is how "
+            "often money arrives (weekly, fortnightly, and so on). Investment "
+            "wrappers (ISA, GIA, SIPP) are one balance each — there is no separate "
+            "stock list. Tax & tools stay available any time.",
         ),
         (
             "06",
+            "Allowances (if mid-year)",
+            "Overview tracks ISA, LISA, and pension room from contribution "
+            "transactions. If you already used allowance before starting this "
+            "profile, use Set prior usage on Overview so remaining room is correct.",
+        ),
+        (
+            "07",
             "Routine",
             "Start a new snapshot when balances change (for example month-end). "
-            "Export from View data when you want a CSV backup.",
+            "To correct a past date, start a session then use Edit this snapshot on "
+            "the History tab. Export or import a CSV zip from View data for backup "
+            "or bulk load. Use Forecasting to project net worth with growth "
+            "assumptions and temporary what-ifs. Use Income report for actual "
+            "pay and interest over a chosen period.",
         ),
     ]
 
@@ -107,6 +123,13 @@ def _getting_started() -> None:
 def _how_it_works() -> None:
     topics = [
         (
+            "Profiles",
+            "Manage profiles lets you switch between local databases, rename the "
+            "display name (the folder id stays the same), close the current profile, "
+            "or delete a profile and its data folder. Everything stays under "
+            "Documents/NysasFinancialTracker on this machine.",
+        ),
+        (
             "Net worth",
             "Assets minus liabilities from the latest balance on each account. "
             "Standing orders that only move money between your own accounts do "
@@ -116,14 +139,27 @@ def _how_it_works() -> None:
             "Snapshots",
             "A committed snapshot is every account balance for one date, written "
             "when you Save snapshot. Until then, changes live in an autosaved draft "
-            "that overlays Overview and wealth charts.",
+            "that overlays Overview and wealth charts. Reopen a past date from "
+            "History → Edit this snapshot to load that date's balances and overwrite "
+            "them on save. Account product details (provider, rates, type) are live "
+            "fields, not versioned per snapshot date.",
+        ),
+        (
+            "Accounts and balances",
+            "Net worth is the sum of account balances only. Cash savings types "
+            "include easy access, limited access, regular saver, fixed terms "
+            "(1/2/5 years), and Premium Bonds. New Premium Bonds accounts default "
+            "to an assumed average prize rate of 3.8% for forecasting (prizes are "
+            "not guaranteed). Stocks & Shares ISA, GIA, and SIPP are tracked as a "
+            "single balance for the wrapper — not individual shares.",
         ),
         (
             "Fixed income",
-            "Expected yearly or monthly amounts are pro-rated across the UK tax "
-            "year for Overview totals. Enter the rate you intend to track "
-            "(usually gross annual for employment). Yearly and monthly toggles "
-            "only change the unit you type in.",
+            "Expected yearly or monthly amounts are the unit you type in; they are "
+            "pro-rated across the UK tax year for Overview totals. Separately, Paid "
+            "(weekly, bi-weekly, four-weekly, monthly, or yearly) records how often "
+            "money lands. Forecasting uses the monthly equivalent of fixed pay plus "
+            "recurring income, minus subscriptions.",
         ),
         (
             "Pay changes",
@@ -135,31 +171,58 @@ def _how_it_works() -> None:
             "Variable income",
             "Freelance and gigs count only from receipts you log. Fixed sources "
             "are not replaced by receipts; use receipts for bonuses or extras if "
-            "you want them visible separately.",
+            "you want them visible separately. Variable income is not auto-included "
+            "in Forecasting — add it as a temporary what-if if needed.",
         ),
         (
             "Recurring items",
-            "Subscriptions are outflow reminders. Standing orders are transfers; "
-            "keep affects-net-worth off when money stays inside your accounts. "
-            "Recurring income is a schedule, not a substitute for salary history.",
+            "Subscriptions are outflow reminders and reduce forecast monthly surplus. "
+            "Standing orders are transfers; keep affects-net-worth off when money "
+            "stays inside your accounts. Recurring income is a schedule, not a "
+            "substitute for salary history.",
+        ),
+        (
+            "Forecasting",
+            "The Forecasting page projects net worth month by month from latest "
+            "balances (or an open draft), stored account rates, and net monthly "
+            "cashflow. You must set a growth assumption for accounts without a "
+            "stored rate — overall (default 5%) or per account. Optionally estimate "
+            "England income tax on employment/trading/pension income and taxable "
+            "interest (ISA, LISA, IFISA, and Premium Bonds are tax-free). Set tax "
+            "treatment and an optional UK tax band on each income source in Edit "
+            "data. Session-only what-ifs are not saved. National Insurance and "
+            "inflation are not modelled.",
+        ),
+        (
+            "Income report",
+            "Income report shows actuals for a date range (default: UK tax year to "
+            "date): pro-rated fixed pay, logged receipts, and ledger interest/"
+            "dividends — not forecasted returns. Taxable vs tax-free interest is "
+            "split by account type. An estimated tax figure for the window is shown "
+            "using England 2026/27 rules.",
         ),
         (
             "Allowances",
-            "ISA, LISA, and pension usage on Overview come from contribution "
-            "transactions in the tax year, not from snapshot balances alone. "
-            "If you never log contributions, usage stays at zero.",
+            "Overview shows ISA (£20k across cash, S&S, LISA, and IFISA), LISA "
+            "(£4k inside that £20k), and pension annual allowance. Usage comes from "
+            "contribution transactions in the tax year, plus any prior usage you set "
+            "manually with Set prior usage. Prior figures are per tax year.",
         ),
         (
             "Tax & tools",
             "Calculators use England rates for the configured year. They are "
             "planning aids, not a Self Assessment filing. Prefills use current "
-            "salary rates where available.",
+            "salary rates where available. Interest projection there is for a "
+            "manual lump sum — use Forecasting for the full portfolio, and Income "
+            "report for actuals.",
         ),
         (
-            "Data and export",
+            "Data import and export",
             "Everything sits in a local SQLite file under your documents folder "
-            "for that profile. View data is read-only. Export builds a CSV zip "
-            "of the main tables.",
+            "for that profile. View data is for browsing. Export builds a CSV zip "
+            "using the same column schema as import. Download CSV import template "
+            "for headers, example rows, and a README of allowed values. Import "
+            "appends rows; ids inside the zip are remapped so links stay valid.",
         ),
     ]
 
@@ -195,13 +258,15 @@ def _install() -> None:
             "03",
             "First profile",
             "Create a local profile. Demo data is optional and useful for a tour. "
-            "Everything stays on this machine under Documents/NysasFinancialTracker.",
+            "Everything stays on this machine under Documents/NysasFinancialTracker. "
+            "Use Manage profiles later to rename, switch, or delete profiles.",
         ),
         (
             "04",
             "Back up",
-            "Copy that Documents folder if you want a backup or to move to another "
-            "computer. Export from View data for a CSV zip of the current profile.",
+            "Copy that Documents folder if you want a full backup or to move to "
+            "another computer. From View data you can also export a CSV zip, or "
+            "download the import template and re-import into a profile.",
         ),
     ]
 
@@ -240,7 +305,8 @@ def _install() -> None:
             "Developers",
             "From source: install uv, then uv sync and uv run python main.py. "
             "To cut a local binary: uv run python scripts/pack.py "
-            "(Windows: scripts/pack.ps1 from PowerShell, not WSL).",
+            "(Windows: scripts/pack.ps1 from PowerShell, not WSL). "
+            "To publish a GitHub Release: .\\scripts\\create-release.ps1 -Version 0.1.0",
         ),
     ]
 
@@ -278,12 +344,24 @@ def _edge_cases() -> None:
         (
             "ISA and LISA undercount",
             "Balance snapshots show what you hold. Allowance used only rises when "
-            "you add contribution transactions for those wrappers.",
+            "you add contribution transactions for those wrappers, or when you set "
+            "prior usage on Overview for amounts already used this tax year before "
+            "you started logging here. Put LISA already used into both ISA prior "
+            "(total subscriptions) and LISA prior (LISA-only).",
         ),
         (
             "Interest rates on accounts",
-            "Stored rates describe the product. They do not yet project future "
-            "growth on Overview or in charts.",
+            "Stored rates describe the product and feed Forecasting. They do not "
+            "project growth on Overview charts themselves. Premium Bonds use an "
+            "assumed average prize rate (default 3.8%) — actual prizes vary.",
+        ),
+        (
+            "Forecast assumptions",
+            "Forecasting asks for an overall or per-account growth estimate "
+            "(default 5%) for accounts without a stored rate. Change it; the "
+            "default is only a starting point. What-ifs on that page are temporary. "
+            "Tax-aware mode uses England income tax on salary and taxable interest "
+            "only — not National Insurance.",
         ),
         (
             "Transfers and double counting",
@@ -294,6 +372,11 @@ def _edge_cases() -> None:
             "Pension annual allowance",
             "The Overview figure is a simplified annual allowance view. Taper and "
             "money-purchase annual allowance rules are not modelled in full.",
+        ),
+        (
+            "Import duplicates",
+            "CSV import always appends. Importing the same zip twice will create "
+            "duplicate accounts and income sources unless you use a fresh profile.",
         ),
         (
             "Privacy",

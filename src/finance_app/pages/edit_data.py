@@ -1,4 +1,4 @@
-"""CRUD forms for accounts, holdings, transactions, snapshots, and recurring."""
+"""CRUD forms for accounts, transactions, snapshots, income, and recurring."""
 
 from __future__ import annotations
 
@@ -7,18 +7,27 @@ from datetime import date
 from nicegui import ui
 
 from finance_app.db.models import (
+    ACCESS_TYPE_LABELS,
     ACCOUNT_TYPE_LABELS,
     FREQUENCY_LABELS,
     INCOME_CADENCE_LABELS,
     INCOME_CATEGORY_LABELS,
+    INTEREST_FREQUENCY_LABELS,
+    PAY_FREQUENCY_LABELS,
     RECURRING_KIND_LABELS,
+    TAX_BAND_LABELS,
+    TAX_TREATMENT_LABELS,
     TRANSACTION_TYPE_LABELS,
     AccountType,
     Frequency,
     IncomeCadence,
     IncomeCategory,
+    PayFrequency,
     RecurringKind,
+    TaxBand,
+    TaxTreatment,
     TransactionType,
+    default_tax_treatment,
 )
 from finance_app.pages.layout import render_shell, require_draft_session, require_profile
 from finance_app.services import accounts as account_service
@@ -56,7 +65,6 @@ def register() -> None:
                 ) as tabs:
                     tab_balances = ui.tab("Balances")
                     tab_income = ui.tab("Income")
-                    tab_holdings = ui.tab("Holdings")
                     tab_txns = ui.tab("Transactions")
                     tab_snaps = ui.tab("History")
                     tab_recurring = ui.tab("Recurring")
@@ -68,8 +76,6 @@ def register() -> None:
                         _balances_panel()
                     with ui.tab_panel(tab_income):
                         _income_panel()
-                    with ui.tab_panel(tab_holdings):
-                        _holdings_panel()
                     with ui.tab_panel(tab_txns):
                         _transactions_panel()
                     with ui.tab_panel(tab_snaps):
@@ -82,13 +88,22 @@ def _refresh() -> None:
     ui.navigate.to("/edit")
 
 
+def _parse_date(raw) -> date | None:
+    if raw in (None, ""):
+        return None
+    if isinstance(raw, date):
+        return raw
+    return date.fromisoformat(str(raw)[:10])
+
+
 def _no_session_gate() -> None:
     with ui.element("div").classes("panel"):
         ui.html('<h2 class="panel-title">No snapshot session open</h2>', sanitize=False)
         ui.label(
-            "Start a new snapshot from the bar at the top of any page. "
-            "That unlocks this spreadsheet and other edit tabs, autosaves your work, "
-            "and lets Overview reflect the draft until you save or discard."
+            "Start a new snapshot from the bar at the top of any page, or reopen a "
+            "past date from History once a session is open. That unlocks this "
+            "spreadsheet and other edit tabs, autosaves your work, and lets Overview "
+            "reflect the draft until you save or discard."
         ).style("color: var(--text-muted); margin-bottom: 1rem; max-width: 40rem;")
         ui.button(
             "Go to Overview",
@@ -106,6 +121,15 @@ def _balances_panel() -> None:
     as_of = meta["as_of_date"]
     as_of_text = as_of.isoformat() if hasattr(as_of, "isoformat") else str(as_of)
     type_options = {t.value: label for t, label in ACCOUNT_TYPE_LABELS.items()}
+    freq_options = {
+        "": "—",
+        **{f.value: label for f, label in INTEREST_FREQUENCY_LABELS.items()},
+    }
+    access_options = {
+        "": "—",
+        **{a.value: label for a, label in ACCESS_TYPE_LABELS.items()},
+    }
+    cell_props = "borderless dense hide-bottom-space"
 
     with ui.element("div").classes("sheet-toolbar"):
         ui.html(
@@ -143,32 +167,45 @@ def _balances_panel() -> None:
                 "Change snapshot date"
             )
 
+    headers = [
+        ("Account", ""),
+        ("Type", ""),
+        ("Provider", ""),
+        ("Rate %", "sheet-th-num"),
+        ("Interest", ""),
+        ("Access", ""),
+        ("Notice", "sheet-th-num"),
+        ("Maturity", ""),
+        ("Sort code", ""),
+        ("Account no.", ""),
+        ("Notes", ""),
+        ("Balance (£)", "sheet-th-num"),
+    ]
+
     with ui.element("div").classes("sheet-grid-wrap"):
         with ui.element("table").classes("sheet-table"):
             with ui.element("thead"):
                 with ui.element("tr"):
-                    with ui.element("th").classes("sheet-th"):
-                        ui.label("Account")
-                    with ui.element("th").classes("sheet-th"):
-                        ui.label("Type")
-                    with ui.element("th").classes("sheet-th sheet-th-num"):
-                        ui.label("Balance (£)")
+                    for label, extra in headers:
+                        classes = f"sheet-th {extra}".strip()
+                        with ui.element("th").classes(classes):
+                            ui.label(label)
                     ui.element("th").classes("sheet-th sheet-th-action")
             with ui.element("tbody"):
                 for row in state["rows"]:
                     with ui.element("tr").classes("sheet-tr"):
                         with ui.element("td").classes("sheet-td"):
                             name_input = ui.input(value=row["name"]).props(
-                                "borderless dense hide-bottom-space"
+                                cell_props
                             ).classes("sheet-input")
 
-                            def make_rename(r=row, widget=name_input):
+                            def make_name(r=row, widget=name_input):
                                 def on_blur() -> None:
                                     new_name = (widget.value or "").strip()
                                     if not new_name or new_name == r["name"]:
                                         return
                                     try:
-                                        draft_session.rename_draft_row(
+                                        draft_session.update_draft_account_fields(
                                             account_id=r["account_id"],
                                             temp_key=r["temp_key"],
                                             name=new_name,
@@ -178,24 +215,236 @@ def _balances_panel() -> None:
 
                                 return on_blur
 
-                            name_input.on("blur", make_rename())
+                            name_input.on("blur", make_name())
 
-                        with ui.element("td").classes("sheet-td sheet-td-muted"):
-                            badge = "New · " if row["is_new"] else ""
-                            debt = " owed" if row["is_liability"] else ""
-                            ui.label(f"{badge}{row['account_type_label']}{debt}")
+                        with ui.element("td").classes("sheet-td"):
+                            type_select = ui.select(
+                                type_options,
+                                value=row["account_type"],
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_type(r=row, widget=type_select):
+                                def on_change() -> None:
+                                    if widget.value == r["account_type"]:
+                                        return
+                                    draft_session.update_draft_account_fields(
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                        account_type=widget.value,
+                                    )
+                                    _refresh()
+
+                                return on_change
+
+                            type_select.on_value_change(lambda _, fn=make_type(): fn())
+
+                        with ui.element("td").classes("sheet-td"):
+                            provider_input = ui.input(
+                                value=row["provider"] or ""
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_provider(r=row, widget=provider_input):
+                                def on_blur() -> None:
+                                    draft_session.update_draft_account_fields(
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                        provider=(widget.value or "").strip(),
+                                    )
+
+                                return on_blur
+
+                            provider_input.on("blur", make_provider())
+
+                        with ui.element("td").classes("sheet-td sheet-td-num"):
+                            rate_input = ui.number(
+                                value=row["interest_rate_pct"],
+                                format="%.2f",
+                            ).props(
+                                f"{cell_props} input-class=text-right"
+                            ).classes("sheet-input")
+
+                            def make_rate(r=row, widget=rate_input):
+                                def on_blur() -> None:
+                                    raw = widget.value
+                                    if raw in (None, ""):
+                                        draft_session.update_draft_account_fields(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            clear_interest_rate=True,
+                                        )
+                                    else:
+                                        draft_session.update_draft_account_fields(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            interest_rate_pct=float(raw),
+                                        )
+
+                                return on_blur
+
+                            rate_input.on("blur", make_rate())
+
+                        with ui.element("td").classes("sheet-td"):
+                            freq_select = ui.select(
+                                freq_options,
+                                value=row["interest_frequency"] or "",
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_freq(r=row, widget=freq_select):
+                                def on_change() -> None:
+                                    draft_session.update_draft_account_fields(
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                        interest_frequency=widget.value or "",
+                                    )
+
+                                return on_change
+
+                            freq_select.on_value_change(
+                                lambda _, fn=make_freq(): fn()
+                            )
+
+                        with ui.element("td").classes("sheet-td"):
+                            access_select = ui.select(
+                                access_options,
+                                value=row["access_type"] or "",
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_access(r=row, widget=access_select):
+                                def on_change() -> None:
+                                    draft_session.update_draft_account_fields(
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                        access_type=widget.value or "",
+                                    )
+
+                                return on_change
+
+                            access_select.on_value_change(
+                                lambda _, fn=make_access(): fn()
+                            )
+
+                        with ui.element("td").classes("sheet-td sheet-td-num"):
+                            notice_input = ui.number(
+                                value=row["notice_days"],
+                                format="%.0f",
+                            ).props(
+                                f"{cell_props} input-class=text-right"
+                            ).classes("sheet-input")
+
+                            def make_notice(r=row, widget=notice_input):
+                                def on_blur() -> None:
+                                    raw = widget.value
+                                    if raw in (None, ""):
+                                        draft_session.update_draft_account_fields(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            clear_notice_days=True,
+                                        )
+                                    else:
+                                        draft_session.update_draft_account_fields(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            notice_days=int(raw),
+                                        )
+
+                                return on_blur
+
+                            notice_input.on("blur", make_notice())
+
+                        with ui.element("td").classes("sheet-td"):
+                            maturity_raw = row["maturity_date"]
+                            if maturity_raw is None:
+                                maturity_text = ""
+                            elif hasattr(maturity_raw, "isoformat"):
+                                maturity_text = maturity_raw.isoformat()
+                            else:
+                                maturity_text = str(maturity_raw)[:10]
+                            maturity_input = ui.input(
+                                value=maturity_text,
+                                placeholder="YYYY-MM-DD",
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_maturity(r=row, widget=maturity_input):
+                                def on_blur() -> None:
+                                    parsed = _parse_date(widget.value)
+                                    if parsed is None:
+                                        draft_session.update_draft_account_fields(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            clear_maturity_date=True,
+                                        )
+                                    else:
+                                        draft_session.update_draft_account_fields(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            maturity_date=parsed,
+                                        )
+
+                                return on_blur
+
+                            maturity_input.on("blur", make_maturity())
+
+                        with ui.element("td").classes("sheet-td"):
+                            sort_input = ui.input(
+                                value=row["sort_code"] or ""
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_sort(r=row, widget=sort_input):
+                                def on_blur() -> None:
+                                    draft_session.update_draft_account_fields(
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                        sort_code=(widget.value or "").strip(),
+                                    )
+
+                                return on_blur
+
+                            sort_input.on("blur", make_sort())
+
+                        with ui.element("td").classes("sheet-td"):
+                            acct_no_input = ui.input(
+                                value=row["account_number"] or ""
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_acct_no(r=row, widget=acct_no_input):
+                                def on_blur() -> None:
+                                    draft_session.update_draft_account_fields(
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                        account_number=(widget.value or "").strip(),
+                                    )
+
+                                return on_blur
+
+                            acct_no_input.on("blur", make_acct_no())
+
+                        with ui.element("td").classes("sheet-td"):
+                            notes_input = ui.input(
+                                value=row["notes"] or ""
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_notes(r=row, widget=notes_input):
+                                def on_blur() -> None:
+                                    draft_session.update_draft_account_fields(
+                                        account_id=r["account_id"],
+                                        temp_key=r["temp_key"],
+                                        notes=(widget.value or "").strip(),
+                                    )
+
+                                return on_blur
+
+                            notes_input.on("blur", make_notes())
 
                         with ui.element("td").classes("sheet-td sheet-td-num"):
                             bal_input = ui.number(
                                 value=row["balance"],
                                 format="%.2f",
                             ).props(
-                                "borderless dense hide-bottom-space "
-                                "input-class=text-right"
+                                f"{cell_props} input-class=text-right"
                             ).classes("sheet-input sheet-balance")
 
-                            def make_save(r=row, widget=bal_input):
-                                def on_change() -> None:
+                            def make_balance(r=row, widget=bal_input):
+                                def on_blur() -> None:
                                     raw = widget.value
                                     amount = None if raw in (None, "") else float(raw)
                                     draft_session.set_balance(
@@ -204,9 +453,9 @@ def _balances_panel() -> None:
                                         temp_key=r["temp_key"],
                                     )
 
-                                return on_change
+                                return on_blur
 
-                            bal_input.on("blur", make_save())
+                            bal_input.on("blur", make_balance())
 
                         with ui.element("td").classes("sheet-td sheet-td-action"):
 
@@ -232,8 +481,13 @@ def _balances_panel() -> None:
         with ui.row().classes("w-full items-end gap-2 flex-wrap no-wrap-md"):
             new_name = ui.input("Name").props("dense").classes("sheet-add-field grow")
             new_type = ui.select(
-                type_options, value=AccountType.SAVINGS.value, label="Type"
+                type_options,
+                value=AccountType.SAVINGS_EASY_ACCESS.value,
+                label="Type",
             ).props("dense").classes("sheet-add-field")
+            new_provider = ui.input("Provider").props("dense").classes(
+                "sheet-add-field"
+            )
             new_bal = ui.number("Balance (£)", value=None, format="%.2f").props(
                 "dense"
             ).classes("sheet-add-field")
@@ -248,11 +502,16 @@ def _balances_panel() -> None:
                 draft_session.add_draft_account(
                     new_name.value,
                     new_type.value,
+                    provider=(new_provider.value or "").strip() or None,
                     opening_balance=opening,
                 )
                 _refresh()
 
             ui.button("Add", on_click=add_row).props("color=primary unelevated dense")
+        ui.label(
+            "Add with name, type, provider, and balance. Fill rate, access, "
+            "maturity, and other details in the sheet above."
+        ).classes("sheet-help")
 
 
 def _income_panel() -> None:
@@ -261,12 +520,21 @@ def _income_panel() -> None:
         "fixed": "Fixed (salary / retainer)",
         "variable": "Variable (freelance / gigs)",
     }
+    pay_options = {p.value: label for p, label in PAY_FREQUENCY_LABELS.items()}
+    treatment_options = {t.value: label for t, label in TAX_TREATMENT_LABELS.items()}
+    band_options = {"": "Not set (estimate from income)", **{
+        b.value: label for b, label in TAX_BAND_LABELS.items()
+    }}
 
     with ui.element("div").classes("panel"):
         ui.html('<h2 class="panel-title">Add income source</h2>', sanitize=False)
         ui.label(
             "Fixed sources use an expected amount (pro-rated across the tax year). "
-            "Variable sources only count receipts you log when you get paid."
+            "Yearly/Monthly is only the unit for that amount. Paid is how often "
+            "money actually arrives (weekly, fortnightly, etc.). Variable sources "
+            "only count receipts you log when you get paid. Tax treatment feeds "
+            "Forecasting and the Income report; optional tax band is for your records "
+            "and display (the estimate still derives the band from total income)."
         ).style("color: var(--text-muted); margin-bottom: 0.75rem;")
         with ui.element("div").classes("form-stack"):
             name = ui.input("Name", placeholder="e.g. Day job, Upwork, Client X").classes(
@@ -279,6 +547,16 @@ def _income_panel() -> None:
                 arrival_options,
                 value="fixed",
                 label="How it arrives",
+            ).classes("w-full")
+            tax_treatment = ui.select(
+                treatment_options,
+                value=TaxTreatment.EMPLOYMENT.value,
+                label="Tax treatment",
+            ).classes("w-full")
+            tax_band = ui.select(
+                band_options,
+                value="",
+                label="UK tax band (optional)",
             ).classes("w-full")
             amount_block = ui.element("div").classes("form-stack")
             with amount_block:
@@ -294,12 +572,25 @@ def _income_panel() -> None:
                     value=None,
                     format="%.2f",
                 ).classes("w-full")
+                pay_frequency = ui.select(
+                    pay_options,
+                    value=PayFrequency.MONTHLY.value,
+                    label="Paid",
+                ).classes("w-full")
             notes = ui.input("Notes").classes("w-full")
 
             def sync_amount_visibility() -> None:
                 amount_block.set_visibility(arrival.value == "fixed")
 
+            def sync_tax_defaults() -> None:
+                try:
+                    cat = IncomeCategory(category.value)
+                except ValueError:
+                    return
+                tax_treatment.value = default_tax_treatment(cat).value
+
             arrival.on_value_change(lambda _: sync_amount_visibility())
+            category.on_value_change(lambda _: sync_tax_defaults())
             sync_amount_visibility()
 
             def add_stream() -> None:
@@ -309,6 +600,7 @@ def _income_panel() -> None:
                 if arrival.value == "variable":
                     cadence = IncomeCadence.VARIABLE.value
                     amount = None
+                    paid = None
                 else:
                     cadence = (
                         IncomeCadence.FIXED_MONTHLY.value
@@ -321,11 +613,15 @@ def _income_panel() -> None:
                     if amount is None or amount <= 0:
                         ui.notify("Enter a positive expected amount", type="warning")
                         return
+                    paid = pay_frequency.value
                 income_service.create_stream(
                     name.value,
                     category.value,
                     cadence,
                     expected_amount=amount,
+                    pay_frequency=paid,
+                    tax_treatment=tax_treatment.value,
+                    tax_band=tax_band.value or None,
                     notes=notes.value or None,
                 )
                 ui.notify("Income source added", type="positive")
@@ -497,6 +793,7 @@ def _income_panel() -> None:
                 {"name": "name", "label": "Name", "field": "name"},
                 {"name": "category", "label": "Category", "field": "category"},
                 {"name": "cadence", "label": "Cadence", "field": "cadence"},
+                {"name": "paid", "label": "Paid", "field": "paid"},
                 {"name": "expected", "label": "Expected", "field": "expected"},
                 {"name": "active", "label": "Active", "field": "active"},
                 {"name": "actions", "label": "", "field": "actions"},
@@ -507,6 +804,11 @@ def _income_panel() -> None:
                     "name": s.name,
                     "category": INCOME_CATEGORY_LABELS.get(s.category, s.category.value),
                     "cadence": INCOME_CADENCE_LABELS.get(s.cadence, s.cadence.value),
+                    "paid": (
+                        PAY_FREQUENCY_LABELS.get(s.pay_frequency, s.pay_frequency.value)
+                        if s.pay_frequency
+                        else "—"
+                    ),
                     "expected": format_gbp(s.expected_amount)
                     if s.expected_amount is not None
                     else "—",
@@ -573,86 +875,6 @@ def _income_panel() -> None:
             ''',
         )
         table.on("remove", remove_receipt)
-
-
-def _holdings_panel() -> None:
-    accounts = account_service.list_accounts(active_only=True)
-    account_options = {str(a.id): a.name for a in accounts}
-    holdings = account_service.list_holdings()
-
-    with ui.element("div").classes("panel"):
-        ui.html('<h2 class="panel-title">Add holding</h2>', sanitize=False)
-        if not account_options:
-            ui.label("Create an account first.")
-        else:
-            with ui.element("div").classes("form-stack"):
-                account_id = ui.select(
-                    account_options,
-                    value=next(iter(account_options)),
-                    label="Account",
-                ).classes("w-full")
-                name = ui.input("Name").classes("w-full")
-                ticker = ui.input("Ticker").classes("w-full")
-                units = ui.number("Units", value=0, format="%.4f").classes("w-full")
-                provider = ui.input("Provider").classes("w-full")
-
-                def add_holding() -> None:
-                    if not (name.value or "").strip():
-                        ui.notify("Name is required", type="warning")
-                        return
-                    account_service.create_holding(
-                        int(account_id.value),
-                        name.value,
-                        ticker=ticker.value or None,
-                        units=float(units.value or 0),
-                        provider=provider.value or None,
-                    )
-                    ui.notify("Holding added", type="positive")
-                    _refresh()
-
-                with ui.element("div").classes("form-actions"):
-                    ui.button("Add holding", on_click=add_holding)
-
-    with ui.element("div").classes("panel"):
-        ui.html('<h2 class="panel-title">Holdings</h2>', sanitize=False)
-        if not holdings:
-            ui.label("No holdings yet.")
-            return
-        account_names = {a.id: a.name for a in account_service.list_accounts()}
-        columns = [
-            {"name": "account", "label": "Account", "field": "account"},
-            {"name": "name", "label": "Name", "field": "name"},
-            {"name": "ticker", "label": "Ticker", "field": "ticker"},
-            {"name": "units", "label": "Units", "field": "units"},
-            {"name": "actions", "label": "", "field": "actions"},
-        ]
-        rows = [
-            {
-                "id": h.id,
-                "account": account_names.get(h.account_id, str(h.account_id)),
-                "name": h.name,
-                "ticker": h.ticker or "",
-                "units": h.units,
-            }
-            for h in holdings
-        ]
-        table = ui.table(columns=columns, rows=rows, row_key="id").classes("w-full")
-
-        def remove(e) -> None:
-            account_service.delete_holding(e.args["id"])
-            ui.notify("Holding deleted", type="info")
-            _refresh()
-
-        table.add_slot(
-            "body-cell-actions",
-            r'''
-            <q-td :props="props">
-              <q-btn dense flat label="Delete" color="negative"
-                     @click="() => $parent.$emit('remove', props.row)" />
-            </q-td>
-            ''',
-        )
-        table.on("remove", remove)
 
 
 def _transactions_panel() -> None:
@@ -748,6 +970,7 @@ def _snapshots_panel() -> None:
         ui.html('<h2 class="panel-title">Committed snapshots</h2>', sanitize=False)
         ui.label(
             "Balances for a new date are edited on Balances, then Save snapshot. "
+            "Use Edit this snapshot to reopen a past date into the draft session. "
             "Expand a date below to delete individual account balances."
         ).classes("sheet-help")
 
@@ -792,6 +1015,27 @@ def _snapshots_panel() -> None:
             with ui.expansion(f"{key} · {count} {account_word}").classes(
                 "w-full sheet-history-exp"
             ):
+
+                def make_edit(date_key=key):
+                    def edit_snapshot() -> None:
+                        draft_session.start_draft_for_date(
+                            date.fromisoformat(date_key)
+                        )
+                        ui.notify(
+                            f"Editing snapshot for {date_key}",
+                            type="positive",
+                        )
+                        _refresh()
+
+                    return edit_snapshot
+
+                ui.button(
+                    "Edit this snapshot",
+                    on_click=make_edit(),
+                ).props("color=primary unelevated dense").classes(
+                    "sheet-history-edit"
+                ).style("margin-bottom: 0.75rem;")
+
                 rows = [
                     {
                         "id": s.id,
@@ -850,7 +1094,7 @@ def _recurring_panel() -> None:
         )
         ui.label(
             "Standing orders move money between your own accounts and do not change "
-            "net worth. Subscriptions reduce forecast cash."
+            "net worth. Subscriptions are outflow reminders (not a cashflow forecast)."
         ).style("color: var(--text-muted); margin-bottom: 0.75rem;")
         with ui.element("div").classes("form-stack"):
             name = ui.input("Name").classes("w-full")

@@ -1,4 +1,4 @@
-"""Account, holding, and transaction CRUD."""
+"""Account and transaction CRUD."""
 
 from __future__ import annotations
 
@@ -7,15 +7,30 @@ from datetime import date
 from sqlalchemy import select
 
 from finance_app.db.models import (
+    DEFAULT_ACCESS_FOR_TYPE,
+    PREMIUM_BONDS_ASSUMED_RATE_PCT,
     AccessType,
     Account,
     AccountType,
-    Holding,
     InterestFrequency,
     Transaction,
     TransactionType,
 )
 from finance_app.db.session import get_session
+
+
+def _premium_bonds_defaults(
+    account_type: AccountType,
+    interest_rate_pct: float | None,
+    interest_frequency: InterestFrequency | None,
+) -> tuple[float | None, InterestFrequency | None]:
+    if account_type != AccountType.PREMIUM_BONDS:
+        return interest_rate_pct, interest_frequency
+    if interest_frequency is None:
+        interest_frequency = InterestFrequency.NONE
+    if interest_rate_pct is None:
+        interest_rate_pct = PREMIUM_BONDS_ASSUMED_RATE_PCT
+    return interest_rate_pct, interest_frequency
 
 
 def list_accounts(*, active_only: bool = False) -> list[Account]:
@@ -24,6 +39,20 @@ def list_accounts(*, active_only: bool = False) -> list[Account]:
         if active_only:
             stmt = stmt.where(Account.active.is_(True))
         return list(session.scalars(stmt).unique().all())
+
+
+def _resolve_access(
+    account_type: AccountType,
+    access_type: AccessType | str | None,
+) -> AccessType | None:
+    if isinstance(access_type, str):
+        if not access_type:
+            access_type = None
+        else:
+            return AccessType(access_type)
+    if access_type is not None:
+        return access_type
+    return DEFAULT_ACCESS_FOR_TYPE.get(account_type)
 
 
 def create_account(
@@ -46,8 +75,12 @@ def create_account(
         account_type = AccountType(account_type)
     if isinstance(interest_frequency, str) and interest_frequency:
         interest_frequency = InterestFrequency(interest_frequency)
-    if isinstance(access_type, str) and access_type:
-        access_type = AccessType(access_type)
+    elif not interest_frequency:
+        interest_frequency = None
+    interest_rate_pct, interest_frequency = _premium_bonds_defaults(
+        account_type, interest_rate_pct, interest_frequency
+    )
+    resolved_access = _resolve_access(account_type, access_type)
     with get_session() as session:
         account = Account(
             name=name.strip(),
@@ -58,8 +91,8 @@ def create_account(
             account_number=(account_number or None),
             sort_code=(sort_code or None),
             interest_rate_pct=interest_rate_pct,
-            interest_frequency=interest_frequency or None,
-            access_type=access_type or None,
+            interest_frequency=interest_frequency,
+            access_type=resolved_access,
             notice_days=notice_days,
             maturity_date=maturity_date,
             opened_date=opened_date,
@@ -89,6 +122,9 @@ def update_account(
     maturity_date: date | None = None,
     opened_date: date | None = None,
     clear_interest_rate: bool = False,
+    clear_maturity_date: bool = False,
+    clear_opened_date: bool = False,
+    clear_notice_days: bool = False,
 ) -> None:
     with get_session() as session:
         account = session.get(Account, account_id)
@@ -102,6 +138,17 @@ def update_account(
                 if isinstance(account_type, str)
                 else account_type
             )
+            if access_type is None and account.account_type in DEFAULT_ACCESS_FOR_TYPE:
+                account.access_type = DEFAULT_ACCESS_FOR_TYPE[account.account_type]
+            if account.account_type == AccountType.PREMIUM_BONDS:
+                if interest_frequency is None and account.interest_frequency is None:
+                    account.interest_frequency = InterestFrequency.NONE
+                if (
+                    not clear_interest_rate
+                    and interest_rate_pct is None
+                    and account.interest_rate_pct is None
+                ):
+                    account.interest_rate_pct = PREMIUM_BONDS_ASSUMED_RATE_PCT
         if notes is not None:
             account.notes = notes
         if active is not None:
@@ -128,11 +175,17 @@ def update_account(
                 if isinstance(access_type, str) and access_type
                 else access_type or None
             )
-        if notice_days is not None:
+        if clear_notice_days:
+            account.notice_days = None
+        elif notice_days is not None:
             account.notice_days = notice_days if notice_days != "" else None
-        if maturity_date is not None:
+        if clear_maturity_date:
+            account.maturity_date = None
+        elif maturity_date is not None:
             account.maturity_date = maturity_date
-        if opened_date is not None:
+        if clear_opened_date:
+            account.opened_date = None
+        elif opened_date is not None:
             account.opened_date = opened_date
 
 
@@ -142,47 +195,6 @@ def delete_account(account_id: int) -> None:
         if account is None:
             return
         session.delete(account)
-
-
-def list_holdings(account_id: int | None = None) -> list[Holding]:
-    with get_session() as session:
-        stmt = select(Holding).order_by(Holding.name)
-        if account_id is not None:
-            stmt = stmt.where(Holding.account_id == account_id)
-        return list(session.scalars(stmt).all())
-
-
-def create_holding(
-    account_id: int,
-    name: str,
-    *,
-    ticker: str | None = None,
-    units: float = 0.0,
-    provider: str | None = None,
-    notes: str | None = None,
-) -> Holding:
-    with get_session() as session:
-        holding = Holding(
-            account_id=account_id,
-            name=name.strip(),
-            ticker=(ticker or None),
-            units=float(units),
-            provider=provider,
-            notes=notes,
-        )
-        session.add(holding)
-        session.flush()
-        session.refresh(holding)
-        session.expunge(holding)
-        return holding
-
-
-def delete_holding(holding_id: int) -> None:
-    with get_session() as session:
-        holding = session.get(Holding, holding_id)
-        if holding is None:
-            return
-        session.delete(holding)
 
 
 def list_transactions(limit: int = 200) -> list[Transaction]:

@@ -508,6 +508,32 @@ body, .q-page, .nicegui-content {
   transform: translateY(-2px);
 }
 
+.profile-card-managed {
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.profile-card-managed:hover {
+  transform: none;
+}
+
+.profile-card-main {
+  cursor: pointer;
+}
+
+.profile-card-actions {
+  border-top: 1px solid var(--border);
+  padding-top: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.badge-accent {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
 .badge {
   display: inline-block;
   padding: 0.15rem 0.55rem;
@@ -536,6 +562,52 @@ body, .q-page, .nicegui-content {
 .q-btn-toggle .q-btn.bg-primary,
 .q-btn-toggle .q-btn.bg-primary .q-btn__content {
   color: #1a1418 !important;
+}
+
+/* Read-only data tables: distinct header row vs body */
+.data-table .q-table__top,
+.data-table .q-table__bottom {
+  color: var(--text-muted);
+}
+
+.data-table .q-table thead tr,
+.data-table .q-table th {
+  background: #243040 !important;
+  color: #f4b6c8 !important;
+  font-weight: 700 !important;
+  font-size: 0.78rem !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent) !important;
+}
+
+.data-table .q-table tbody td {
+  color: var(--text) !important;
+  font-weight: 400 !important;
+  border-bottom: 1px solid rgba(232, 238, 244, 0.08) !important;
+}
+
+.data-table .q-table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.data-table .q-table tbody tr:hover td {
+  background: rgba(244, 182, 200, 0.06) !important;
+}
+
+/* Quasar file uploader header uses primary pink — keep dark text for contrast */
+.q-uploader__header,
+.q-uploader__header-content,
+.q-uploader__title,
+.q-uploader__subtitle,
+.q-uploader__header .q-btn,
+.q-uploader__header .q-btn__content,
+.q-uploader__header .q-icon {
+  color: #1a1418 !important;
+}
+
+.q-uploader__header {
+  background: var(--accent) !important;
 }
 
 .q-tab--active .q-tab__indicator {

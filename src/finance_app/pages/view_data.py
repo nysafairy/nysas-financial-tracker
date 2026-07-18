@@ -6,6 +6,7 @@ from nicegui import ui
 
 from finance_app.pages.layout import render_shell, require_profile
 from finance_app.services import export as export_service
+from finance_app.services import import_data as import_service
 from finance_app.services import inventory as inventory_service
 from finance_app.ui.components import format_gbp, page_header
 
@@ -25,15 +26,78 @@ def register() -> None:
                 "A clear read-only look at what is stored in this profile.",
             )
 
-            with ui.element("div").classes("form-actions").style("margin-bottom: 1rem;"):
+            with ui.element("div").classes("form-actions").style(
+                "margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;"
+            ):
                 def do_export() -> None:
                     filename, payload = export_service.build_export_zip()
                     ui.download(payload, filename)
                     ui.notify("Export ready", type="positive")
 
+                def do_template() -> None:
+                    filename, payload = export_service.build_import_template_zip()
+                    ui.download(payload, filename)
+                    ui.notify("Import template downloaded", type="positive")
+
                 ui.button("Export all data (CSV zip)", on_click=do_export).props(
                     "color=primary"
                 )
+                ui.button("Download CSV import template", on_click=do_template).props(
+                    "outline"
+                )
+
+            with ui.element("div").classes("panel").style("margin-bottom: 1rem;"):
+                ui.html('<h2 class="panel-title">Import CSV zip</h2>', sanitize=False)
+                ui.label(
+                    "Use the template (or a prior export). Headers must match exactly. "
+                    "Rows are added to this profile; ids inside the zip are remapped "
+                    "so account and income links stay valid."
+                ).style("color: var(--text-muted); margin-bottom: 0.75rem;")
+
+                async def on_upload(e) -> None:
+                    content = None
+                    file_obj = getattr(e, "file", None)
+                    if file_obj is not None and hasattr(file_obj, "read"):
+                        result = file_obj.read()
+                        if hasattr(result, "__await__"):
+                            content = await result
+                        else:
+                            content = result
+                    elif getattr(e, "content", None) is not None:
+                        raw = e.content
+                        content = raw.read() if hasattr(raw, "read") else raw
+                    if not content:
+                        ui.notify("Could not read uploaded file", type="warning")
+                        return
+                    try:
+                        result = import_service.import_csv_zip(content)
+                    except import_service.CsvImportError as exc:
+                        ui.notify(str(exc), type="negative", close_button=True)
+                        return
+                    except Exception as exc:
+                        ui.notify(
+                            f"Import failed: {exc}",
+                            type="negative",
+                            close_button=True,
+                        )
+                        return
+                    summary = ", ".join(
+                        f"{k.replace('_', ' ')} {v}"
+                        for k, v in result.items()
+                        if v
+                    )
+                    ui.notify(
+                        f"Imported: {summary}" if summary else "Import finished (no rows)",
+                        type="positive",
+                        close_button=True,
+                    )
+                    ui.navigate.to("/view")
+
+                ui.upload(
+                    label="Upload CSV zip",
+                    on_upload=on_upload,
+                    auto_upload=True,
+                ).props("accept=.zip flat bordered").classes("w-full")
 
             with ui.element("div").classes("inventory-stats"):
                 for label, key in [
@@ -42,7 +106,6 @@ def register() -> None:
                     ("Accounts", "accounts"),
                     ("Assets", "assets"),
                     ("Debts", "debts"),
-                    ("Holdings", "holdings"),
                     ("Transactions", "transactions"),
                     ("Snapshots", "snapshots"),
                     ("Recurring", "recurring"),
@@ -55,7 +118,6 @@ def register() -> None:
             with ui.tabs().classes("w-full") as tabs:
                 tab_income = ui.tab("Income")
                 tab_accounts = ui.tab("Accounts")
-                tab_holdings = ui.tab("Holdings")
                 tab_txns = ui.tab("Transactions")
                 tab_snaps = ui.tab("Snapshots")
                 tab_recurring = ui.tab("Recurring")
@@ -69,8 +131,6 @@ def register() -> None:
                     )
                 with ui.tab_panel(tab_accounts):
                     _accounts_table(data["accounts"])
-                with ui.tab_panel(tab_holdings):
-                    _holdings_table(data["holdings"])
                 with ui.tab_panel(tab_txns):
                     _transactions_table(data["transactions"], counts["transactions"])
                 with ui.tab_panel(tab_snaps):
@@ -94,7 +154,14 @@ def _income_tables(
                 columns=[
                     {"name": "name", "label": "Name", "field": "name"},
                     {"name": "category", "label": "Category", "field": "category"},
-                    {"name": "cadence", "label": "Cadence", "field": "cadence"},
+                    {"name": "cadence", "label": "Expected unit", "field": "cadence"},
+                    {"name": "pay_frequency", "label": "Paid", "field": "pay_frequency"},
+                    {
+                        "name": "tax_treatment",
+                        "label": "Tax treatment",
+                        "field": "tax_treatment",
+                    },
+                    {"name": "tax_band", "label": "Tax band", "field": "tax_band"},
                     {"name": "expected", "label": "Expected", "field": "expected"},
                     {"name": "active", "label": "Active", "field": "active"},
                     {"name": "notes", "label": "Notes", "field": "notes"},
@@ -111,7 +178,7 @@ def _income_tables(
                 ],
                 row_key="id",
                 pagination={"rowsPerPage": 15},
-            ).classes("w-full")
+            ).classes("w-full data-table")
 
     with ui.element("div").classes("panel"):
         ui.html(
@@ -135,7 +202,7 @@ def _income_tables(
             ],
             row_key="id",
             pagination={"rowsPerPage": 20},
-        ).classes("w-full")
+        ).classes("w-full data-table")
 
 
 def _accounts_table(rows: list[dict]) -> None:
@@ -172,27 +239,7 @@ def _accounts_table(rows: list[dict]) -> None:
             ],
             row_key="id",
             pagination={"rowsPerPage": 15},
-        ).classes("w-full")
-
-
-def _holdings_table(rows: list[dict]) -> None:
-    with ui.element("div").classes("panel"):
-        ui.html('<h2 class="panel-title">Holdings</h2>', sanitize=False)
-        if not rows:
-            ui.label("No holdings yet.")
-            return
-        ui.table(
-            columns=[
-                {"name": "account", "label": "Account", "field": "account"},
-                {"name": "name", "label": "Name", "field": "name"},
-                {"name": "ticker", "label": "Ticker", "field": "ticker"},
-                {"name": "units", "label": "Units", "field": "units"},
-                {"name": "provider", "label": "Provider", "field": "provider"},
-            ],
-            rows=rows,
-            row_key="id",
-            pagination={"rowsPerPage": 15},
-        ).classes("w-full")
+        ).classes("w-full data-table")
 
 
 def _transactions_table(rows: list[dict], total: int) -> None:
@@ -217,7 +264,7 @@ def _transactions_table(rows: list[dict], total: int) -> None:
             rows=[{**row, "amount": format_gbp(row["amount"])} for row in rows],
             row_key="id",
             pagination={"rowsPerPage": 20},
-        ).classes("w-full")
+        ).classes("w-full data-table")
 
 
 def _snapshots_grouped(groups: list[dict], line_total: int) -> None:
@@ -229,7 +276,9 @@ def _snapshots_grouped(groups: list[dict], line_total: int) -> None:
             sanitize=False,
         )
         ui.label(
-            "Each date is one snapshot of balances across accounts. Expand a date to see the detail."
+            "Each date is one snapshot of balances across accounts. Expand a date to see the detail. "
+            "To change balances for a past date, open a snapshot session and use Edit this snapshot "
+            "on the Edit data History tab."
         ).style("color: var(--text-muted); margin-bottom: 0.85rem;")
         if not groups:
             ui.label("No snapshots yet.")
@@ -252,7 +301,7 @@ def _snapshots_grouped(groups: list[dict], line_total: int) -> None:
             rows=summary_rows,
             row_key="date",
             pagination={"rowsPerPage": 12},
-        ).classes("w-full").style("margin-bottom: 1rem;")
+        ).classes("w-full data-table").style("margin-bottom: 1rem;")
 
         for group in groups[:12]:
             with ui.expansion(
@@ -273,7 +322,7 @@ def _snapshots_grouped(groups: list[dict], line_total: int) -> None:
                         for line in group["lines"]
                     ],
                     row_key="id",
-                ).classes("w-full")
+                ).classes("w-full data-table")
 
 
 def _recurring_table(rows: list[dict]) -> None:
@@ -308,4 +357,4 @@ def _recurring_table(rows: list[dict]) -> None:
             ],
             row_key="id",
             pagination={"rowsPerPage": 15},
-        ).classes("w-full")
+        ).classes("w-full data-table")

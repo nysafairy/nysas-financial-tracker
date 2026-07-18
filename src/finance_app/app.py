@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import multiprocessing
 from multiprocessing import freeze_support
 
@@ -12,7 +13,9 @@ from finance_app.db.session import get_current_profile
 from finance_app.pages import (
     calculators,
     edit_data,
+    forecasting,
     guide,
+    income_report,
     overview,
     profile_select,
     view_data,
@@ -27,12 +30,36 @@ def _register_pages() -> None:
     view_data.register()
     edit_data.register()
     visualisations.register()
+    forecasting.register()
+    income_report.register()
     calculators.register()
     guide.register()
 
 
+def _silence_windows_connection_resets(
+    loop: asyncio.AbstractEventLoop,
+    context: dict,
+) -> None:
+    exc = context.get("exception")
+    if isinstance(exc, ConnectionResetError):
+        return
+    if isinstance(exc, OSError) and getattr(exc, "winerror", None) == 10054:
+        return
+    loop.default_exception_handler(context)
+
+
 def _startup() -> None:
     """Auto-open last profile when present; otherwise land on picker."""
+    import sys
+
+    if sys.platform == "win32":
+        try:
+            asyncio.get_running_loop().set_exception_handler(
+                _silence_windows_connection_resets
+            )
+        except RuntimeError:
+            pass
+
     if get_current_profile() is not None:
         return
     last = profile_service.get_last_opened()
@@ -47,6 +74,9 @@ def main(*, native_window: bool | None = None, reload: bool = False) -> None:
     """Run the UK Finance desktop app."""
     import os
     import sys
+
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     freeze_support()
     _register_pages()

@@ -1,14 +1,13 @@
 {
   "tax_year": "2026-27",
   "source_notes": [
-    "Adult ISA allowance £20,000 across Cash / Stocks & Shares / LISA / IFISA.",
+    "ISA allowance £20,000 across Cash / Stocks & Shares / LISA / IFISA.",
     "LISA max £4,000 of that £20,000; government bonus is 25% (up to £1,000), not 20%.",
-    "Junior ISA £9,000 is separate from the adult £20,000 allowance.",
     "Pension annual allowance simplified at £60,000 (taper / MPAA not modelled yet)."
   ],
   "allowances": {
     "adult_isa": {
-      "label": "Adult ISA",
+      "label": "ISA",
       "limit": 20000,
       "unit": "GBP",
       "notes": "Combined subscriptions across cash, S&S, LISA and IFISA."
@@ -21,12 +20,6 @@
       "max_bonus": 1000,
       "counts_toward": "adult_isa",
       "notes": "25% government bonus on contributions; counts inside the £20k ISA limit."
-    },
-    "junior_isa": {
-      "label": "Junior ISA",
-      "limit": 9000,
-      "unit": "GBP",
-      "notes": "Per child; separate from adult ISA allowance."
     },
     "pension_annual": {
       "label": "Pension annual allowance",

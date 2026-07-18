@@ -15,15 +15,18 @@ from finance_app.db.models import (
     INCOME_CATEGORY_LABELS,
     INTEREST_FREQUENCY_LABELS,
     LIABILITY_TYPES,
+    PAY_FREQUENCY_LABELS,
     RECURRING_KIND_LABELS,
+    TAX_BAND_LABELS,
+    TAX_TREATMENT_LABELS,
     TRANSACTION_TYPE_LABELS,
     Account,
     BalanceSnapshot,
-    Holding,
     IncomeReceipt,
     IncomeStream,
     RecurringItem,
     Transaction,
+    default_tax_treatment,
 )
 from finance_app.db.session import get_session
 
@@ -41,7 +44,6 @@ def _latest_balances(session) -> dict[int, float]:
 def database_inventory() -> dict[str, Any]:
     with get_session() as session:
         accounts = list(session.scalars(select(Account).order_by(Account.name)).all())
-        holdings = list(session.scalars(select(Holding).order_by(Holding.name)).all())
         transactions = list(
             session.scalars(
                 select(Transaction)
@@ -81,7 +83,6 @@ def database_inventory() -> dict[str, Any]:
             "accounts": len(accounts),
             "assets": sum(1 for a in accounts if a.account_type not in LIABILITY_TYPES),
             "debts": sum(1 for a in accounts if a.account_type in LIABILITY_TYPES),
-            "holdings": len(holdings),
             "income_streams": len(streams),
             "income_receipts": session.scalar(select(func.count()).select_from(IncomeReceipt))
             or 0,
@@ -120,17 +121,6 @@ def database_inventory() -> dict[str, Any]:
                 "notes": a.notes or "",
             }
             for a in accounts
-        ]
-        holding_rows = [
-            {
-                "id": h.id,
-                "name": h.name,
-                "ticker": h.ticker or "",
-                "units": h.units,
-                "provider": h.provider or "",
-                "account": account_names.get(h.account_id, str(h.account_id)),
-            }
-            for h in holdings
         ]
         txn_rows = [
             {
@@ -186,6 +176,20 @@ def database_inventory() -> dict[str, Any]:
                 "name": s.name,
                 "category": INCOME_CATEGORY_LABELS.get(s.category, s.category.value),
                 "cadence": INCOME_CADENCE_LABELS.get(s.cadence, s.cadence.value),
+                "pay_frequency": (
+                    PAY_FREQUENCY_LABELS.get(s.pay_frequency, s.pay_frequency.value)
+                    if s.pay_frequency
+                    else "—"
+                ),
+                "tax_treatment": TAX_TREATMENT_LABELS.get(
+                    getattr(s, "tax_treatment", None) or default_tax_treatment(s.category),
+                    "—",
+                ),
+                "tax_band": (
+                    TAX_BAND_LABELS.get(s.tax_band, s.tax_band.value)
+                    if getattr(s, "tax_band", None)
+                    else "—"
+                ),
                 "expected_amount": s.expected_amount,
                 "active": s.active,
                 "notes": s.notes or "",
@@ -206,7 +210,6 @@ def database_inventory() -> dict[str, Any]:
         return {
             "counts": counts,
             "accounts": account_rows,
-            "holdings": holding_rows,
             "transactions": txn_rows,
             "snapshot_groups": snapshot_groups,
             "recurring": recurring_rows,

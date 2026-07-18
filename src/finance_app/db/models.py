@@ -26,11 +26,16 @@ class Base(DeclarativeBase):
 
 class AccountType(str, enum.Enum):
     CURRENT = "current"
-    SAVINGS = "savings"
+    SAVINGS_EASY_ACCESS = "savings_easy_access"
+    SAVINGS_LIMITED_ACCESS = "savings_limited_access"
+    SAVINGS_REGULAR = "savings_regular"
+    SAVINGS_FIXED_1Y = "savings_fixed_1y"
+    SAVINGS_FIXED_2Y = "savings_fixed_2y"
+    SAVINGS_FIXED_5Y = "savings_fixed_5y"
+    PREMIUM_BONDS = "premium_bonds"
     ISA_CASH = "isa_cash"
     ISA_STOCKS = "isa_stocks"
     LISA = "lisa"
-    JUNIOR_ISA = "junior_isa"
     IFISA = "ifisa"
     GIA = "gia"
     PENSION_SIP = "pension_sip"
@@ -104,6 +109,33 @@ class IncomeCadence(str, enum.Enum):
     VARIABLE = "variable"
 
 
+class PayFrequency(str, enum.Enum):
+    WEEKLY = "weekly"
+    BI_WEEKLY = "bi_weekly"
+    FOUR_WEEKLY = "four_weekly"
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
+
+
+class TaxBand(str, enum.Enum):
+    """Optional recorded UK income-tax band for a salary / employment source."""
+
+    BASIC = "basic"
+    HIGHER = "higher"
+    ADDITIONAL = "additional"
+
+
+class TaxTreatment(str, enum.Enum):
+    """How a stream is classified when estimating England income tax."""
+
+    EMPLOYMENT = "employment"
+    TRADING = "trading"
+    PENSION = "pension"
+    PROPERTY = "property"
+    EXEMPT = "exempt"
+    OTHER = "other"
+
+
 LIABILITY_TYPES = {
     AccountType.CREDIT_CARD,
     AccountType.LOAN,
@@ -111,13 +143,35 @@ LIABILITY_TYPES = {
     AccountType.OTHER_DEBT,
 }
 
+# Cash-style savings (non-ISA) — used for defaults and grouping helpers.
+CASH_SAVINGS_TYPES = {
+    AccountType.SAVINGS_EASY_ACCESS,
+    AccountType.SAVINGS_LIMITED_ACCESS,
+    AccountType.SAVINGS_REGULAR,
+    AccountType.SAVINGS_FIXED_1Y,
+    AccountType.SAVINGS_FIXED_2Y,
+    AccountType.SAVINGS_FIXED_5Y,
+    AccountType.PREMIUM_BONDS,
+}
+
+# Assumed average prize rate for Premium Bonds (NS&I). Not a guaranteed AER.
+PREMIUM_BONDS_ASSUMED_RATE_PCT = 3.8
+
+# Default annual growth assumption on the Forecasting page for accounts without a stored rate.
+FORECAST_DEFAULT_ASSUMED_GROWTH_PCT = 5.0
+
 ACCOUNT_TYPE_LABELS: dict[AccountType, str] = {
     AccountType.CURRENT: "Current account",
-    AccountType.SAVINGS: "Savings",
+    AccountType.SAVINGS_EASY_ACCESS: "Easy access savings",
+    AccountType.SAVINGS_LIMITED_ACCESS: "Limited access savings",
+    AccountType.SAVINGS_REGULAR: "Regular saver",
+    AccountType.SAVINGS_FIXED_1Y: "Fixed term (1 year)",
+    AccountType.SAVINGS_FIXED_2Y: "Fixed term (2 years)",
+    AccountType.SAVINGS_FIXED_5Y: "Fixed term (5 years)",
+    AccountType.PREMIUM_BONDS: "Premium Bonds (NS&I)",
     AccountType.ISA_CASH: "Cash ISA",
     AccountType.ISA_STOCKS: "Stocks & Shares ISA",
     AccountType.LISA: "Lifetime ISA (LISA)",
-    AccountType.JUNIOR_ISA: "Junior ISA",
     AccountType.IFISA: "Innovative Finance ISA",
     AccountType.GIA: "General investment account",
     AccountType.PENSION_SIP: "SIPP",
@@ -129,12 +183,28 @@ ACCOUNT_TYPE_LABELS: dict[AccountType, str] = {
     AccountType.OTHER: "Other",
 }
 
-# Adult ISA wrappers that share the £20k annual subscription limit.
+# Implied access when the account type already encodes it.
+DEFAULT_ACCESS_FOR_TYPE: dict[AccountType, AccessType] = {
+    AccountType.SAVINGS_EASY_ACCESS: AccessType.EASY_ACCESS,
+    AccountType.SAVINGS_LIMITED_ACCESS: AccessType.LIMITED_ACCESS,
+    AccountType.SAVINGS_REGULAR: AccessType.LIMITED_ACCESS,
+    AccountType.SAVINGS_FIXED_1Y: AccessType.FIXED_TERM,
+    AccountType.SAVINGS_FIXED_2Y: AccessType.FIXED_TERM,
+    AccountType.SAVINGS_FIXED_5Y: AccessType.FIXED_TERM,
+    AccountType.PREMIUM_BONDS: AccessType.NA,
+}
+
+# ISA wrappers that share the £20k annual subscription limit.
 ADULT_ISA_TYPES = {
     AccountType.ISA_CASH,
     AccountType.ISA_STOCKS,
     AccountType.LISA,
     AccountType.IFISA,
+}
+
+# Interest / prizes treated as tax-free in England income-tax estimates.
+TAX_EXEMPT_INTEREST_ACCOUNT_TYPES = ADULT_ISA_TYPES | {
+    AccountType.PREMIUM_BONDS,  # NS&I prizes are tax-free
 }
 
 INTEREST_FREQUENCY_LABELS: dict[InterestFrequency, str] = {
@@ -199,6 +269,43 @@ INCOME_CADENCE_LABELS: dict[IncomeCadence, str] = {
     IncomeCadence.VARIABLE: "Variable / as earned",
 }
 
+PAY_FREQUENCY_LABELS: dict[PayFrequency, str] = {
+    PayFrequency.WEEKLY: "Weekly",
+    PayFrequency.BI_WEEKLY: "Bi-weekly (fortnightly)",
+    PayFrequency.FOUR_WEEKLY: "Four-weekly",
+    PayFrequency.MONTHLY: "Monthly",
+    PayFrequency.YEARLY: "Yearly",
+}
+
+TAX_BAND_LABELS: dict[TaxBand, str] = {
+    TaxBand.BASIC: "Basic rate",
+    TaxBand.HIGHER: "Higher rate",
+    TaxBand.ADDITIONAL: "Additional rate",
+}
+
+TAX_TREATMENT_LABELS: dict[TaxTreatment, str] = {
+    TaxTreatment.EMPLOYMENT: "Employment (PAYE / salary)",
+    TaxTreatment.TRADING: "Self-employment / trading",
+    TaxTreatment.PENSION: "Pension income",
+    TaxTreatment.PROPERTY: "Property income",
+    TaxTreatment.EXEMPT: "Tax-exempt",
+    TaxTreatment.OTHER: "Other taxable",
+}
+
+
+def default_tax_treatment(category: IncomeCategory) -> TaxTreatment:
+    if category == IncomeCategory.SALARY:
+        return TaxTreatment.EMPLOYMENT
+    if category in (IncomeCategory.FREELANCE, IncomeCategory.GIG):
+        return TaxTreatment.TRADING
+    if category == IncomeCategory.PENSION:
+        return TaxTreatment.PENSION
+    if category == IncomeCategory.PROPERTY:
+        return TaxTreatment.PROPERTY
+    if category == IncomeCategory.INVESTMENT:
+        return TaxTreatment.EXEMPT
+    return TaxTreatment.OTHER
+
 
 class SchemaMeta(Base):
     __tablename__ = "schema_meta"
@@ -240,7 +347,6 @@ class Account(Base):
     maturity_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     opened_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    holdings: Mapped[list[Holding]] = relationship(back_populates="account")
     transactions: Mapped[list[Transaction]] = relationship(
         back_populates="account",
         foreign_keys="Transaction.account_id",
@@ -256,21 +362,6 @@ class Account(Base):
     @property
     def is_adult_isa(self) -> bool:
         return self.account_type in ADULT_ISA_TYPES
-
-
-class Holding(Base):
-    __tablename__ = "holdings"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
-    name: Mapped[str] = mapped_column(String(160), nullable=False)
-    ticker: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    units: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    provider: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    account: Mapped[Account] = relationship(back_populates="holdings")
-    snapshots: Mapped[list[HoldingSnapshot]] = relationship(back_populates="holding")
 
 
 class Transaction(Base):
@@ -307,21 +398,6 @@ class BalanceSnapshot(Base):
     balance: Mapped[float] = mapped_column(Float, nullable=False)
 
     account: Mapped[Account] = relationship(back_populates="balance_snapshots")
-
-
-class HoldingSnapshot(Base):
-    __tablename__ = "holding_snapshots"
-    __table_args__ = (
-        UniqueConstraint("holding_id", "as_of_date", name="uq_holding_snapshot"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    holding_id: Mapped[int] = mapped_column(ForeignKey("holdings.id"), nullable=False)
-    as_of_date: Mapped[date] = mapped_column(Date, nullable=False)
-    units: Mapped[float] = mapped_column(Float, nullable=False)
-    market_value: Mapped[float] = mapped_column(Float, nullable=False)
-
-    holding: Mapped[Holding] = relationship(back_populates="snapshots")
 
 
 class SnapshotDraft(Base):
@@ -363,6 +439,18 @@ class SnapshotDraftAccount(Base):
     account_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(120), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sort_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    interest_rate_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    interest_frequency: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    access_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    notice_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    maturity_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    opened_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    clear_interest_rate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    clear_notice_days: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    clear_maturity_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    clear_opened_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     draft: Mapped[SnapshotDraft] = relationship(back_populates="accounts")
@@ -425,6 +513,16 @@ class IncomeStream(Base):
     # Current expected amount (yearly or monthly depending on cadence).
     # Pay rises are also recorded in IncomeRatePeriod for dated history.
     expected_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # How often pay actually arrives (independent of expected-amount unit).
+    pay_frequency: Mapped[PayFrequency | None] = mapped_column(
+        Enum(PayFrequency), nullable=True
+    )
+    # How this stream feeds England income-tax estimates.
+    tax_treatment: Mapped[TaxTreatment] = mapped_column(
+        Enum(TaxTreatment), nullable=False, default=TaxTreatment.OTHER
+    )
+    # Optional recorded band for salary sources (informational + forecast display).
+    tax_band: Mapped[TaxBand | None] = mapped_column(Enum(TaxBand), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -462,3 +560,25 @@ class IncomeReceipt(Base):
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     stream: Mapped[IncomeStream] = relationship(back_populates="receipts")
+
+
+class AllowanceBaseline(Base):
+    """
+    Manual prior usage for the current UK tax year.
+
+    Use when starting the app mid-year after already using ISA / LISA / pension
+    room outside this ledger. Added on top of contribution transactions.
+    """
+
+    __tablename__ = "allowance_baselines"
+    __table_args__ = (
+        UniqueConstraint("tax_year", "allowance_key", name="uq_allowance_baseline"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # e.g. "2026-27" matching uk_allowances JSON tax_year field
+    tax_year: Mapped[str] = mapped_column(String(16), nullable=False)
+    # adult_isa | lisa | pension_annual
+    allowance_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    prior_used: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    notes: Mapped[str | None] = mapped_column(String(255), nullable=True)

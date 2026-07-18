@@ -29,16 +29,30 @@ Running and storing data locally costs £0.
 
 Binaries for Windows, macOS, and Linux are built by GitHub Actions. You do not need three machines locally.
 
-1. Push the repo to GitHub and enable Actions.
-2. Tag a version and push the tag:
+**Easiest (Windows PowerShell):**
 
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+```powershell
+.\scripts\create-release.ps1 -Version 0.1.0
+```
 
-3. The **Release builds** workflow packages each OS and attaches the files to a GitHub Release for that tag.
-4. You can also run the workflow manually from the Actions tab (`workflow_dispatch`) to test builds without publishing.
+That creates an annotated `v0.1.0` tag and pushes it to `origin`, which starts the **Release builds** workflow and publishes a GitHub Release when builds finish.
+
+Options:
+
+```powershell
+.\scripts\create-release.ps1 -Version 0.1.0 -DryRun    # show what would happen
+.\scripts\create-release.ps1 -Version 0.1.0 -Force     # allow a dirty working tree
+.\scripts\create-release.ps1 -Version 0.1.0 -SkipPush  # tag locally only
+```
+
+**Manual equivalent:**
+
+```bash
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
+```
+
+You can also run the workflow manually from the Actions tab (`workflow_dispatch`) to test builds without publishing a Release (the Release job only runs on tags).
 
 Local packaging (current OS only):
 
@@ -86,12 +100,15 @@ On Linux, native mode needs a desktop display and WebView libraries (via `pywebv
 
 | Page | Purpose |
 |------|---------|
-| Overview | Net worth hero, tax-year flow, allocation |
-| View data | Read-only inventory of the current database |
-| Edit data | Income sources (salary/freelance/gigs), accounts, snapshots, recurring |
+| Overview | Net worth, tax-year income, allocation, ISA/LISA/pension allowances (with optional prior usage) |
+| View data | Read-only inventory; CSV export, import template, and import |
+| Edit data | Snapshot balances sheet, income (expected unit + pay frequency), transactions, history, recurring |
 | Visualisations | Deeper charts |
-| Tax & tools | England 2026/27 income tax estimate + interest projection |
+| Forecasting | Net-worth projection; optional England income-tax estimate; session-only what-ifs |
+| Income report | Actual income, receipts, and ledger interest for a period (default tax YTD) |
+| Tax & tools | England 2026/27 income tax estimate + single-principal interest projection |
 | Guide | Getting started, behaviour notes, install help |
+| Profiles | Create, open, rename, close, or delete local profiles |
 
 ## Data layout
 
@@ -104,14 +121,17 @@ Documents/NysasFinancialTracker/
 
 One database per profile contains:
 
-- **Ledger** — accounts (including debts, rates, sort codes, maturity), holdings, transactions
-- **Snapshots** — point-in-time balances (debt balances are amounts owed)
-- **Income streams** — salary / freelance / gigs + receipts
+- **Ledger** — accounts (UK savings types, Premium Bonds with assumed 3.8% prize rate by default, ISAs, pensions, debts, rates, sort codes, maturity), transactions
+- **Snapshots** — point-in-time balances (debt balances are amounts owed); past dates can be reopened and edited from History
+- **Income streams** — salary / freelance / gigs + receipts, with expected-amount unit, pay frequency, tax treatment, and optional UK tax band
+- **Allowance baselines** — optional mid-year prior usage for ISA / LISA / pension
 - **Recurring** — subscriptions, standing orders, recurring income
 
-**Overview** shows ISA/LISA/pension allowance usage. **View data** can **export a CSV zip** of all tables.
+Investment wrappers are one balance per account (no separate stock holdings list).
 
-LISA government bonus is **25%** (up to £1,000/year on £4,000 contributions), and LISA counts inside the £20,000 adult ISA limit.
+**Overview** shows ISA (£20k), LISA, and pension allowance usage (contributions + prior usage). **Forecasting** projects net worth using stored rates plus an assumed growth rate (default 5%, overall or per account), optional England income tax on taxable income/interest, and session-only what-ifs. **Income report** lists actual sources and ledger interest for a chosen period (default tax year to date). **View data** can **export a CSV zip**, download an **import template**, and **import** a matching zip (appends rows; ids remapped).
+
+LISA government bonus is **25%** (up to £1,000/year on £4,000 contributions), and LISA counts inside the £20,000 ISA limit.
 
 ## Tax notes
 

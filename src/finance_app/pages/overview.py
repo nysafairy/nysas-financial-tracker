@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import plotly.graph_objects as go
 from nicegui import ui
 
@@ -181,20 +183,103 @@ def register() -> None:
                 and i["key"] in {"adult_isa", "lisa", "pension_annual"}
             ]
             if tracked:
-                with ui.element("div").classes("allowance-grid"):
-                    for item in tracked:
+                with ui.element("div").classes("panel").style("margin-bottom: 1rem;"):
+                    with ui.row().classes(
+                        "w-full items-center justify-between gap-2 flex-wrap"
+                    ):
                         ui.html(
-                            f'<div class="allowance-card">'
-                            f'<div class="title">{item["label"]}</div>'
-                            f'<div class="used">{format_gbp(item["used"])} / '
-                            f'{format_gbp(item["limit"])}</div>'
-                            f'<div class="ty-track"><div class="ty-fill" '
-                            f'style="width:{item["pct"]:.1f}%"></div></div>'
-                            f'<div class="meta">{format_gbp(item["remaining"])} remaining'
-                            f'{(" · est. bonus " + format_gbp(item["bonus_earned_estimate"])) if item.get("bonus_earned_estimate") is not None else ""}'
-                            f"</div></div>",
+                            f'<h2 class="panel-title" style="margin:0">'
+                            f'Allowances · {allowance["tax_year"]}</h2>',
                             sanitize=False,
                         )
+
+                        def open_prior_dialog() -> None:
+                            current = {
+                                i["key"]: float(i.get("prior_used") or 0)
+                                for i in tracked
+                            }
+                            with ui.dialog() as dialog, ui.card().classes(
+                                "w-full"
+                            ).style("max-width: 28rem;"):
+                                ui.label(
+                                    f"Prior usage this tax year ({allowance['tax_year']})"
+                                ).classes("text-lg font-medium")
+                                ui.label(
+                                    "If you started this profile mid-year, enter how much "
+                                    "allowance you had already used elsewhere. This is added "
+                                    "on top of contribution transactions logged here. "
+                                    "ISA should include any LISA subscriptions already used."
+                                ).style(
+                                    "color: var(--text-muted); font-size: 0.85rem; "
+                                    "margin-bottom: 0.85rem;"
+                                )
+                                fields: dict[str, Any] = {}
+                                labels = {
+                                    "adult_isa": "ISA already used (£)",
+                                    "lisa": "LISA already used (£)",
+                                    "pension_annual": "Pension annual allowance already used (£)",
+                                }
+                                for key in ("adult_isa", "lisa", "pension_annual"):
+                                    fields[key] = ui.number(
+                                        labels[key],
+                                        value=current.get(key) or None,
+                                        format="%.2f",
+                                        min=0,
+                                    ).classes("w-full")
+
+                                def save_priors() -> None:
+                                    payload = {}
+                                    for key, widget in fields.items():
+                                        raw = widget.value
+                                        payload[key] = (
+                                            0.0
+                                            if raw in (None, "")
+                                            else float(raw)
+                                        )
+                                    try:
+                                        allowance_service.set_baselines(payload)
+                                    except ValueError as exc:
+                                        ui.notify(str(exc), type="warning")
+                                        return
+                                    dialog.close()
+                                    ui.notify("Prior allowance usage saved", type="positive")
+                                    ui.navigate.to("/")
+
+                                with ui.row().classes("w-full justify-end gap-2"):
+                                    ui.button("Cancel", on_click=dialog.close).props(
+                                        "flat"
+                                    )
+                                    ui.button("Save", on_click=save_priors).props(
+                                        "color=primary unelevated"
+                                    )
+                            dialog.open()
+
+                        ui.button(
+                            "Set prior usage",
+                            on_click=open_prior_dialog,
+                        ).props("flat dense")
+
+                    with ui.element("div").classes("allowance-grid"):
+                        for item in tracked:
+                            prior = float(item.get("prior_used") or 0)
+                            prior_note = (
+                                f" · includes {format_gbp(prior)} prior"
+                                if prior > 0
+                                else ""
+                            )
+                            ui.html(
+                                f'<div class="allowance-card">'
+                                f'<div class="title">{item["label"]}</div>'
+                                f'<div class="used">{format_gbp(item["used"])} / '
+                                f'{format_gbp(item["limit"])}</div>'
+                                f'<div class="ty-track"><div class="ty-fill" '
+                                f'style="width:{item["pct"]:.1f}%"></div></div>'
+                                f'<div class="meta">{format_gbp(item["remaining"])} remaining'
+                                f"{prior_note}"
+                                f'{(" · est. bonus " + format_gbp(item["bonus_earned_estimate"])) if item.get("bonus_earned_estimate") is not None else ""}'
+                                f"</div></div>",
+                                sanitize=False,
+                            )
 
             with ui.element("div").classes("responsive-grid"):
                 with ui.element("div").classes("panel"):

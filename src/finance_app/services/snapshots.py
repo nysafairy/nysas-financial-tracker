@@ -1,4 +1,4 @@
-"""Balance and holding snapshot services."""
+"""Balance snapshot services."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import date
 
 from sqlalchemy import select
 
-from finance_app.db.models import BalanceSnapshot, HoldingSnapshot
+from finance_app.db.models import BalanceSnapshot
 from finance_app.db.session import get_session
 
 
@@ -18,6 +18,15 @@ def list_balance_snapshots(limit: int = 500) -> list[BalanceSnapshot]:
             .limit(limit)
         )
         return list(session.scalars(stmt).all())
+
+
+def balances_for_date(as_of_date: date) -> dict[int, float]:
+    """Return account_id -> balance for a specific snapshot date."""
+    with get_session() as session:
+        rows = session.scalars(
+            select(BalanceSnapshot).where(BalanceSnapshot.as_of_date == as_of_date)
+        ).all()
+        return {row.account_id: float(row.balance) for row in rows}
 
 
 def upsert_balance_snapshot(account_id: int, as_of_date: date, balance: float) -> None:
@@ -59,31 +68,3 @@ def delete_balance_snapshot(snapshot_id: int) -> None:
         if row is None:
             return
         session.delete(row)
-
-
-def upsert_holding_snapshot(
-    holding_id: int,
-    as_of_date: date,
-    *,
-    units: float,
-    market_value: float,
-) -> None:
-    with get_session() as session:
-        existing = session.scalar(
-            select(HoldingSnapshot).where(
-                HoldingSnapshot.holding_id == holding_id,
-                HoldingSnapshot.as_of_date == as_of_date,
-            )
-        )
-        if existing:
-            existing.units = float(units)
-            existing.market_value = float(market_value)
-        else:
-            session.add(
-                HoldingSnapshot(
-                    holding_id=holding_id,
-                    as_of_date=as_of_date,
-                    units=float(units),
-                    market_value=float(market_value),
-                )
-            )

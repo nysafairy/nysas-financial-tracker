@@ -12,16 +12,17 @@ from finance_app.db.models import (
     AccountType,
     BalanceSnapshot,
     Frequency,
-    Holding,
-    HoldingSnapshot,
     IncomeCadence,
     IncomeCategory,
     IncomeRatePeriod,
     IncomeReceipt,
     IncomeStream,
     InterestFrequency,
+    PayFrequency,
     RecurringItem,
     RecurringKind,
+    TaxBand,
+    TaxTreatment,
     Transaction,
     TransactionType,
 )
@@ -45,20 +46,40 @@ def seed_demo_data() -> None:
             name="Everyday current",
             account_type=AccountType.CURRENT,
             notes="Day-to-day spending",
+            provider="Demo Bank",
+            sort_code="00-00-00",
         )
         savings = Account(
             name="Easy-access savings",
-            account_type=AccountType.SAVINGS,
+            account_type=AccountType.SAVINGS_EASY_ACCESS,
             notes="Emergency fund",
             provider="Demo Bank",
             interest_rate_pct=4.5,
             interest_frequency=InterestFrequency.MONTHLY,
             access_type=AccessType.EASY_ACCESS,
         )
+        regular = Account(
+            name="Regular saver",
+            account_type=AccountType.SAVINGS_REGULAR,
+            notes="Monthly deposit bonus rate",
+            provider="Demo Bank",
+            interest_rate_pct=6.0,
+            interest_frequency=InterestFrequency.ANNUALLY,
+            access_type=AccessType.LIMITED_ACCESS,
+        )
+        premium = Account(
+            name="Premium Bonds",
+            account_type=AccountType.PREMIUM_BONDS,
+            notes="NS&I prize draw — assumed average prize rate for forecasting",
+            provider="NS&I",
+            interest_rate_pct=3.8,
+            interest_frequency=InterestFrequency.NONE,
+            access_type=AccessType.NA,
+        )
         isa = Account(
             name="S&S ISA",
             account_type=AccountType.ISA_STOCKS,
-            notes="Long-term investing",
+            notes="Long-term investing — one balance for the wrapper",
             provider="Vanguard",
             access_type=AccessType.EASY_ACCESS,
         )
@@ -79,23 +100,17 @@ def seed_demo_data() -> None:
             account_type=AccountType.CREDIT_CARD,
             notes="Monthly spend — balance is amount owed",
         )
-        session.add_all([current, savings, isa, lisa, sipp, card])
-        session.flush()
-
-        vanguard = Holding(
-            account_id=isa.id,
-            name="Global All Cap",
-            ticker="VWRL",
-            units=120.0,
-            provider="Vanguard",
+        session.add_all(
+            [current, savings, regular, premium, isa, lisa, sipp, card]
         )
-        session.add(vanguard)
         session.flush()
 
         months = [today - timedelta(days=30 * i) for i in range(5, -1, -1)]
         balances = {
             current.id: [2400, 2100, 2650, 2300, 2800, 2550],
             savings.id: [8000, 8200, 8400, 8600, 8800, 9000],
+            regular.id: [600, 800, 1000, 1200, 1400, 1600],
+            premium.id: [5000, 5000, 5000, 5000, 5000, 5000],
             isa.id: [12000, 12400, 12850, 13100, 13600, 14200],
             sipp.id: [28000, 28500, 29100, 29800, 30500, 31200],
             card.id: [450, 520, 380, 610, 490, 430],
@@ -109,15 +124,6 @@ def seed_demo_data() -> None:
                         balance=float(value),
                     )
                 )
-
-        session.add(
-            HoldingSnapshot(
-                holding_id=vanguard.id,
-                as_of_date=today,
-                units=120.0,
-                market_value=14200.0,
-            )
-        )
 
         tax_year_start = date(today.year if today.month >= 4 else today.year - 1, 4, 6)
         session.add_all(
@@ -190,12 +196,16 @@ def seed_demo_data() -> None:
             category=IncomeCategory.SALARY,
             cadence=IncomeCadence.FIXED_ANNUAL,
             expected_amount=42000.0,
-            notes="Gross annual salary",
+            pay_frequency=PayFrequency.MONTHLY,
+            tax_treatment=TaxTreatment.EMPLOYMENT,
+            tax_band=TaxBand.BASIC,
+            notes="Gross annual salary, paid monthly",
         )
         freelance = IncomeStream(
             name="Design freelance",
             category=IncomeCategory.FREELANCE,
             cadence=IncomeCadence.VARIABLE,
+            tax_treatment=TaxTreatment.TRADING,
             notes="Invoice as paid",
         )
         session.add_all([job, freelance])

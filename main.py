@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import multiprocessing
 import os
 import sys
 from multiprocessing import freeze_support
+
+# Windows Proactor logs noisy ConnectionResetError (WinError 10054) when the
+# WebView drops sockets during page navigation. Selector policy avoids that.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from nicegui import app, native, ui
 

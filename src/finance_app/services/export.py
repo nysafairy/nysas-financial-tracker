@@ -1,4 +1,4 @@
-"""Export profile data as CSV (zip of tables)."""
+"""Export profile data as CSV (zip of tables) and import templates."""
 
 from __future__ import annotations
 
@@ -8,16 +8,18 @@ import zipfile
 from datetime import datetime, timezone
 
 from finance_app.db.models import (
-    ACCOUNT_TYPE_LABELS,
     ACCESS_TYPE_LABELS,
+    ACCOUNT_TYPE_LABELS,
     FREQUENCY_LABELS,
     INCOME_CADENCE_LABELS,
     INCOME_CATEGORY_LABELS,
     INTEREST_FREQUENCY_LABELS,
+    PAY_FREQUENCY_LABELS,
     RECURRING_KIND_LABELS,
     TRANSACTION_TYPE_LABELS,
 )
 from finance_app.services import accounts as account_service
+from finance_app.services import csv_schema
 from finance_app.services import income as income_service
 from finance_app.services import recurring as recurring_service
 from finance_app.services import snapshots as snapshot_service
@@ -33,11 +35,24 @@ def _write_csv(rows: list[dict], fieldnames: list[str]) -> bytes:
     return buffer.getvalue().encode("utf-8")
 
 
+def build_import_template_zip() -> tuple[str, bytes]:
+    """Return (filename, zip_bytes) for an empty-schema template with examples."""
+    examples = csv_schema.example_template_rows()
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(csv_schema.README_TXT, csv_schema.template_readme().encode("utf-8"))
+        for filename, fields in csv_schema.IMPORT_TABLES.items():
+            zf.writestr(
+                filename,
+                _write_csv(examples.get(filename, []), fields),
+            )
+    return "nysas_financial_tracker_import_template.zip", buffer.getvalue()
+
+
 def build_export_zip() -> tuple[str, bytes]:
     """Return (filename, zip_bytes) for all major tables."""
     inventory = database_inventory()
     accounts = account_service.list_accounts()
-    holdings = account_service.list_holdings()
     transactions = account_service.list_transactions(limit=10_000)
     snaps = snapshot_service.list_balance_snapshots(limit=50_000)
     recurring = recurring_service.list_recurring()
@@ -48,21 +63,17 @@ def build_export_zip() -> tuple[str, bytes]:
         {
             "id": a.id,
             "name": a.name,
-            "type": ACCOUNT_TYPE_LABELS.get(a.account_type, a.account_type.value),
+            "type": a.account_type.value,
             "provider": a.provider or "",
             "account_number": a.account_number or "",
             "sort_code": a.sort_code or "",
             "interest_rate_pct": a.interest_rate_pct
             if a.interest_rate_pct is not None
             else "",
-            "interest_frequency": INTEREST_FREQUENCY_LABELS.get(
-                a.interest_frequency, ""
-            )
+            "interest_frequency": a.interest_frequency.value
             if a.interest_frequency
             else "",
-            "access_type": ACCESS_TYPE_LABELS.get(a.access_type, "")
-            if a.access_type
-            else "",
+            "access_type": a.access_type.value if a.access_type else "",
             "notice_days": a.notice_days if a.notice_days is not None else "",
             "maturity_date": a.maturity_date.isoformat() if a.maturity_date else "",
             "opened_date": a.opened_date.isoformat() if a.opened_date else "",
@@ -72,23 +83,11 @@ def build_export_zip() -> tuple[str, bytes]:
         }
         for a in accounts
     ]
-    holding_rows = [
-        {
-            "id": h.id,
-            "account_id": h.account_id,
-            "name": h.name,
-            "ticker": h.ticker or "",
-            "units": h.units,
-            "provider": h.provider or "",
-            "notes": h.notes or "",
-        }
-        for h in holdings
-    ]
     txn_rows = [
         {
             "id": t.id,
             "date": t.txn_date.isoformat(),
-            "type": TRANSACTION_TYPE_LABELS.get(t.txn_type, t.txn_type.value),
+            "type": t.txn_type.value,
             "amount": t.amount,
             "account_id": t.account_id if t.account_id is not None else "",
             "description": t.description or "",
@@ -108,9 +107,9 @@ def build_export_zip() -> tuple[str, bytes]:
         {
             "id": r.id,
             "name": r.name,
-            "kind": RECURRING_KIND_LABELS.get(r.kind, r.kind.value),
+            "kind": r.kind.value,
             "amount": r.amount,
-            "frequency": FREQUENCY_LABELS.get(r.frequency, r.frequency.value),
+            "frequency": r.frequency.value,
             "from_account_id": r.from_account_id or "",
             "to_account_id": r.to_account_id or "",
             "affects_net_worth": r.affects_net_worth,
@@ -123,8 +122,15 @@ def build_export_zip() -> tuple[str, bytes]:
         {
             "id": s.id,
             "name": s.name,
-            "category": INCOME_CATEGORY_LABELS.get(s.category, s.category.value),
-            "cadence": INCOME_CADENCE_LABELS.get(s.cadence, s.cadence.value),
+            "category": s.category.value,
+            "cadence": s.cadence.value,
+            "pay_frequency": s.pay_frequency.value if s.pay_frequency else "",
+            "tax_treatment": (
+                s.tax_treatment.value
+                if getattr(s, "tax_treatment", None)
+                else ""
+            ),
+            "tax_band": s.tax_band.value if getattr(s, "tax_band", None) else "",
             "expected_amount": s.expected_amount
             if s.expected_amount is not None
             else "",
@@ -149,93 +155,53 @@ def build_export_zip() -> tuple[str, bytes]:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
-            "accounts.csv",
-            _write_csv(
-                account_rows,
-                [
-                    "id",
-                    "name",
-                    "type",
-                    "provider",
-                    "account_number",
-                    "sort_code",
-                    "interest_rate_pct",
-                    "interest_frequency",
-                    "access_type",
-                    "notice_days",
-                    "maturity_date",
-                    "opened_date",
-                    "currency",
-                    "active",
-                    "notes",
-                ],
-            ),
+            csv_schema.ACCOUNTS_CSV,
+            _write_csv(account_rows, csv_schema.ACCOUNT_FIELDS),
         )
         zf.writestr(
-            "holdings.csv",
-            _write_csv(
-                holding_rows,
-                ["id", "account_id", "name", "ticker", "units", "provider", "notes"],
-            ),
+            csv_schema.TRANSACTIONS_CSV,
+            _write_csv(txn_rows, csv_schema.TRANSACTION_FIELDS),
         )
         zf.writestr(
-            "transactions.csv",
-            _write_csv(
-                txn_rows,
-                ["id", "date", "type", "amount", "account_id", "description"],
-            ),
+            csv_schema.BALANCE_SNAPSHOTS_CSV,
+            _write_csv(snap_rows, csv_schema.BALANCE_SNAPSHOT_FIELDS),
         )
         zf.writestr(
-            "balance_snapshots.csv",
-            _write_csv(snap_rows, ["id", "date", "account_id", "balance"]),
+            csv_schema.RECURRING_CSV,
+            _write_csv(recurring_rows, csv_schema.RECURRING_FIELDS),
         )
         zf.writestr(
-            "recurring.csv",
-            _write_csv(
-                recurring_rows,
-                [
-                    "id",
-                    "name",
-                    "kind",
-                    "amount",
-                    "frequency",
-                    "from_account_id",
-                    "to_account_id",
-                    "affects_net_worth",
-                    "active",
-                    "notes",
-                ],
-            ),
+            csv_schema.INCOME_STREAMS_CSV,
+            _write_csv(stream_rows, csv_schema.INCOME_STREAM_FIELDS),
         )
         zf.writestr(
-            "income_streams.csv",
-            _write_csv(
-                stream_rows,
-                [
-                    "id",
-                    "name",
-                    "category",
-                    "cadence",
-                    "expected_amount",
-                    "active",
-                    "notes",
-                ],
-            ),
+            csv_schema.INCOME_RECEIPTS_CSV,
+            _write_csv(receipt_rows, csv_schema.INCOME_RECEIPT_FIELDS),
         )
-        zf.writestr(
-            "income_receipts.csv",
-            _write_csv(
-                receipt_rows,
-                ["id", "stream_id", "date", "amount", "description"],
-            ),
-        )
-        # Lightweight inventory summary counts
         counts = inventory["counts"]
         zf.writestr(
-            "summary.csv",
+            csv_schema.SUMMARY_CSV,
             _write_csv(
                 [{"key": k, "value": v} for k, v in counts.items()],
                 ["key", "value"],
             ),
         )
+        # Human-readable legend so exports stay usable without the template README.
+        legend_lines = ["# Enum labels (for reference; import accepts value or label)", ""]
+        for title, labels in [
+            ("account type", ACCOUNT_TYPE_LABELS),
+            ("interest_frequency", INTEREST_FREQUENCY_LABELS),
+            ("access_type", ACCESS_TYPE_LABELS),
+            ("transaction type", TRANSACTION_TYPE_LABELS),
+            ("recurring kind", RECURRING_KIND_LABELS),
+            ("frequency", FREQUENCY_LABELS),
+            ("income category", INCOME_CATEGORY_LABELS),
+            ("income cadence", INCOME_CADENCE_LABELS),
+            ("pay_frequency", PAY_FREQUENCY_LABELS),
+        ]:
+            legend_lines.append(f"## {title}")
+            for member, label in labels.items():
+                legend_lines.append(f"  {member.value} = {label}")
+            legend_lines.append("")
+        zf.writestr("ENUMS.txt", "\n".join(legend_lines).encode("utf-8"))
     return filename, buffer.getvalue()
