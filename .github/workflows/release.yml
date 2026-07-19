@@ -20,9 +20,9 @@ jobs:
           - os: windows-latest
             artefact_pattern: NysasFinancialTracker-Windows.exe
           - os: macos-latest
-            artefact_pattern: NysasFinancialTracker-macOS-*
+            artefact_pattern: NysasFinancialTracker-macOS-*.zip
           - os: ubuntu-latest
-            artefact_pattern: NysasFinancialTracker-Linux
+            artefact_pattern: NysasFinancialTracker-Linux.zip
 
     runs-on: ${{ matrix.os }}
 
@@ -79,13 +79,13 @@ jobs:
             | File | Platform |
             |------|----------|
             | `NysasFinancialTracker-Windows.exe` | Windows |
-            | `NysasFinancialTracker-macOS-arm64` | Apple Silicon Mac |
-            | `NysasFinancialTracker-macOS-x64` | Intel Mac (if published) |
-            | `NysasFinancialTracker-Linux` | Linux |
+            | `NysasFinancialTracker-macOS-arm64.zip` | Apple Silicon Mac |
+            | `NysasFinancialTracker-macOS-x64.zip` | Intel Mac (if published) |
+            | `NysasFinancialTracker-Linux.zip` | Linux |
 
             **Windows:** if SmartScreen warns, choose More info then Run anyway.
-            **macOS:** if Gatekeeper blocks the app, right-click Open, or allow it under System Settings → Privacy & Security.
-            **Linux:** may need WebKitGTK for the native window; otherwise set `UK_FINANCE_BROWSER=1` and open the printed URL.
+            **macOS:** unzip the download, then open `NysasFinancialTracker.app`. If Gatekeeper blocks it, right-click Open, or allow it under System Settings → Privacy & Security.
+            **Linux:** unzip, then run `./NysasFinancialTracker` (use `chmod +x` if needed). May need WebKitGTK for the native window; otherwise set `UK_FINANCE_BROWSER=1` and open the printed URL.
 
             Your data is stored locally under `Documents/NysasFinancialTracker/`.
         env:

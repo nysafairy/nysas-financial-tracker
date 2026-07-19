@@ -246,13 +246,14 @@ def _install() -> None:
             "01",
             "Download",
             "Open the project's GitHub Releases page. Take the file that matches "
-            "your computer: Windows (.exe), macOS (arm64 or x64), or Linux.",
+            "your computer: Windows (.exe), or the macOS / Linux .zip.",
         ),
         (
             "02",
             "Open the app",
-            "Put the file somewhere permanent (Desktop or Applications), then "
-            "double-click it. No installer is required.",
+            "Put it somewhere permanent (Desktop or Applications). On Windows, "
+            "double-click the .exe. On macOS, unzip and open NysasFinancialTracker.app. "
+            "On Linux, unzip and run ./NysasFinancialTracker. No installer is required.",
         ),
         (
             "03",
@@ -287,14 +288,16 @@ def _install() -> None:
         ),
         (
             "macOS Gatekeeper",
-            "If macOS says the app cannot be opened, right-click the file and "
-            "choose Open, or allow it under System Settings, Privacy & Security.",
+            "Download the .zip, unzip it, then open NysasFinancialTracker.app. "
+            "If macOS says the app cannot be opened, right-click and choose Open, "
+            "or allow it under System Settings, Privacy & Security.",
         ),
         (
             "Linux display",
-            "Native windows need a desktop session and WebKitGTK (via pywebview). "
-            "If the window fails, run with UK_FINANCE_BROWSER=1 and use the URL "
-            "printed in the terminal.",
+            "Unzip the download, then run ./NysasFinancialTracker (chmod +x if "
+            "needed). Native windows need a desktop session and WebKitGTK "
+            "(via pywebview). If the window fails, run with UK_FINANCE_BROWSER=1 "
+            "and use the URL printed in the terminal.",
         ),
         (
             "Which Mac file",

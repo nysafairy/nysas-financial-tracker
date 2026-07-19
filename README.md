@@ -12,16 +12,16 @@ Your data stays on this computer as SQLite databases under `Documents/NysasFinan
    | File | Platform |
    |------|----------|
    | `NysasFinancialTracker-Windows.exe` | Windows |
-   | `NysasFinancialTracker-macOS-arm64` | Apple Silicon Mac |
-   | `NysasFinancialTracker-macOS-x64` | Intel Mac |
-   | `NysasFinancialTracker-Linux` | Linux |
+   | `NysasFinancialTracker-macOS-arm64.zip` | Apple Silicon Mac |
+   | `NysasFinancialTracker-macOS-x64.zip` | Intel Mac |
+   | `NysasFinancialTracker-Linux.zip` | Linux |
 
-3. Double-click to run. Create a profile on first launch.
+3. Run the app (Windows: double-click the `.exe`; macOS/Linux: unzip first). Create a profile on first launch.
 4. Use the in-app **Guide** for how to enter data.
 
 **Windows:** if SmartScreen warns, choose More info, then Run anyway.  
-**macOS:** if Gatekeeper blocks the app, right-click Open, or allow it under Privacy & Security.  
-**Linux:** native mode needs a desktop display and WebKitGTK; if needed, run with `UK_FINANCE_BROWSER=1`.
+**macOS:** unzip the download, then open `NysasFinancialTracker.app`. If Gatekeeper blocks it, right-click Open, or allow it under Privacy & Security.  
+**Linux:** unzip, then run `./NysasFinancialTracker` (`chmod +x` if needed). Native mode needs a desktop display and WebKitGTK; if needed, run with `UK_FINANCE_BROWSER=1`.
 
 Running and storing data locally costs £0.
 
