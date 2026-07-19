@@ -238,41 +238,6 @@ def tax_year_transaction_totals(
         return dict(totals)
 
 
-def monthly_income_series(on: date | None = None) -> list[dict[str, Any]]:
-    start = uk_tax_year_start(on)
-    end = uk_tax_year_end(on)
-    income_types = {
-        TransactionType.INTEREST,
-        TransactionType.DIVIDEND,
-        TransactionType.EARNINGS,
-        TransactionType.PENSION_INCOME,
-        TransactionType.PROPERTY_INCOME,
-        TransactionType.TRUST_INCOME,
-    }
-    with get_session() as session:
-        rows = session.scalars(
-            select(Transaction).where(
-                Transaction.txn_date >= start,
-                Transaction.txn_date <= end,
-                Transaction.txn_type.in_(income_types),
-            )
-        ).all()
-        buckets: dict[str, dict[str, float]] = defaultdict(
-            lambda: {
-                "interest": 0.0,
-                "dividend": 0.0,
-                "earnings": 0.0,
-                "pension_income": 0.0,
-                "property_income": 0.0,
-                "trust_income": 0.0,
-            }
-        )
-        for row in rows:
-            key = f"{row.txn_date.year:04d}-{row.txn_date.month:02d}"
-            buckets[key][row.txn_type.value] += row.amount
-        return [{"month": month, **values} for month, values in sorted(buckets.items())]
-
-
 def net_worth_change() -> dict[str, Any]:
     series = net_worth_series()
     if len(series) < 2:
@@ -308,9 +273,6 @@ def overview_metrics() -> dict[str, Any]:
     from finance_app.services import draft_session
     from finance_app.services import income as income_service
 
-    totals = tax_year_transaction_totals()
-    tax_paid = totals.get(TransactionType.TAX_PAID.value, 0.0)
-    tax_refund = totals.get(TransactionType.TAX_REFUND.value, 0.0)
     wealth = assets_and_debts()
     recurring = recurring_service.recurring_monthly_totals()
     income = income_service.income_by_source()
@@ -319,11 +281,6 @@ def overview_metrics() -> dict[str, Any]:
         "net_worth": wealth["net_worth"],
         "assets": wealth["assets"],
         "debts": wealth["debts"],
-        "interest_ytd": totals.get(TransactionType.INTEREST.value, 0.0),
-        "earnings_ytd": totals.get(TransactionType.EARNINGS.value, 0.0)
-        + totals.get(TransactionType.PENSION_INCOME.value, 0.0),
-        "dividends_ytd": totals.get(TransactionType.DIVIDEND.value, 0.0),
-        "tax_paid_ytd": tax_paid - tax_refund,
         "subscriptions_monthly": recurring["subscriptions"],
         "recurring_income_monthly": recurring["income"],
         "standing_orders_monthly": recurring["standing_orders"],

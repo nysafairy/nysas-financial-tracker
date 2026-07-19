@@ -10,7 +10,7 @@ APP_NAME = "NysasFinancialTracker"
 APP_TITLE = "Nysa's Financial Tracker"
 PROFILES_FILENAME = "profiles.json"
 DB_FILENAME = "finance.db"
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 def default_data_root() -> Path:

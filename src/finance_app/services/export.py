@@ -19,6 +19,7 @@ from finance_app.db.models import (
     TRANSACTION_TYPE_LABELS,
 )
 from finance_app.services import accounts as account_service
+from finance_app.services import allowances as allowance_service
 from finance_app.services import csv_schema
 from finance_app.services import income as income_service
 from finance_app.services import recurring as recurring_service
@@ -41,7 +42,8 @@ def build_import_template_zip() -> tuple[str, bytes]:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(csv_schema.README_TXT, csv_schema.template_readme().encode("utf-8"))
-        for filename, fields in csv_schema.IMPORT_TABLES.items():
+        all_tables = {**csv_schema.IMPORT_TABLES, **csv_schema.OPTIONAL_IMPORT_TABLES}
+        for filename, fields in all_tables.items():
             zf.writestr(
                 filename,
                 _write_csv(examples.get(filename, []), fields),
@@ -58,6 +60,8 @@ def build_export_zip() -> tuple[str, bytes]:
     recurring = recurring_service.list_recurring()
     streams = income_service.list_streams()
     receipts = income_service.list_receipts(limit=10_000)
+    rate_periods = income_service.list_all_rate_periods()
+    baselines = allowance_service.list_baselines()
 
     account_rows = [
         {
@@ -112,7 +116,6 @@ def build_export_zip() -> tuple[str, bytes]:
             "frequency": r.frequency.value,
             "from_account_id": r.from_account_id or "",
             "to_account_id": r.to_account_id or "",
-            "affects_net_worth": r.affects_net_worth,
             "active": r.active,
             "notes": r.notes or "",
         }
@@ -149,6 +152,26 @@ def build_export_zip() -> tuple[str, bytes]:
         }
         for r in receipts
     ]
+    rate_period_rows = [
+        {
+            "id": p.id,
+            "stream_id": p.stream_id,
+            "effective_from": p.effective_from.isoformat(),
+            "annual_amount": p.annual_amount,
+            "notes": p.notes or "",
+        }
+        for p in rate_periods
+    ]
+    baseline_rows = [
+        {
+            "id": b.id,
+            "tax_year": b.tax_year,
+            "allowance_key": b.allowance_key,
+            "prior_used": b.prior_used,
+            "notes": b.notes or "",
+        }
+        for b in baselines
+    ]
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"nysas_financial_tracker_export_{stamp}.zip"
@@ -177,6 +200,14 @@ def build_export_zip() -> tuple[str, bytes]:
         zf.writestr(
             csv_schema.INCOME_RECEIPTS_CSV,
             _write_csv(receipt_rows, csv_schema.INCOME_RECEIPT_FIELDS),
+        )
+        zf.writestr(
+            csv_schema.INCOME_RATE_PERIODS_CSV,
+            _write_csv(rate_period_rows, csv_schema.INCOME_RATE_PERIOD_FIELDS),
+        )
+        zf.writestr(
+            csv_schema.ALLOWANCE_BASELINES_CSV,
+            _write_csv(baseline_rows, csv_schema.ALLOWANCE_BASELINE_FIELDS),
         )
         counts = inventory["counts"]
         zf.writestr(

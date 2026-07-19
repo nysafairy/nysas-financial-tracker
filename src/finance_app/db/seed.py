@@ -112,6 +112,7 @@ def seed_demo_data() -> None:
             regular.id: [600, 800, 1000, 1200, 1400, 1600],
             premium.id: [5000, 5000, 5000, 5000, 5000, 5000],
             isa.id: [12000, 12400, 12850, 13100, 13600, 14200],
+            lisa.id: [2000, 2200, 2400, 2600, 2800, 3000],
             sipp.id: [28000, 28500, 29100, 29800, 30500, 31200],
             card.id: [450, 520, 380, 610, 490, 430],
         }
@@ -134,13 +135,6 @@ def seed_demo_data() -> None:
                     txn_type=TransactionType.INTEREST,
                     amount=85.40,
                     description="Savings interest",
-                ),
-                Transaction(
-                    account_id=None,
-                    txn_date=tax_year_start + timedelta(days=20),
-                    txn_type=TransactionType.EARNINGS,
-                    amount=3200.00,
-                    description="Salary",
                 ),
                 Transaction(
                     account_id=None,
@@ -176,7 +170,6 @@ def seed_demo_data() -> None:
                     amount=15.99,
                     frequency=Frequency.MONTHLY,
                     from_account_id=current.id,
-                    affects_net_worth=True,
                 ),
                 RecurringItem(
                     name="Savings top-up",
@@ -185,8 +178,14 @@ def seed_demo_data() -> None:
                     frequency=Frequency.MONTHLY,
                     from_account_id=current.id,
                     to_account_id=savings.id,
-                    affects_net_worth=False,
                     notes="Moves money between own accounts",
+                ),
+                RecurringItem(
+                    name="Side hustle (forecast)",
+                    kind=RecurringKind.INCOME,
+                    amount=200.0,
+                    frequency=Frequency.MONTHLY,
+                    notes="Forecast-only schedule — not salary history",
                 ),
             ]
         )

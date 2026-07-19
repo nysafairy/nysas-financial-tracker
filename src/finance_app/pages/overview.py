@@ -170,8 +170,16 @@ def register() -> None:
                             sanitize=False,
                         )
                         ui.html(
+                            f'<div class="flow-row"><span class="label">Forecast income schedule</span>'
+                            f'<span class="value green">'
+                            f'{format_gbp(data["recurring_income_monthly"])}</span></div>',
+                            sanitize=False,
+                        )
+                        ui.html(
                             '<div style="color:var(--text-muted);font-size:0.8rem;margin-top:0.45rem">'
-                            "Standing orders only move money between your accounts.</div>",
+                            "Standing orders only move money between your accounts. "
+                            "Forecast income is a schedule for Forecasting, not salary history."
+                            "</div>",
                             sanitize=False,
                         )
 

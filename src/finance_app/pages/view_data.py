@@ -222,6 +222,7 @@ def _accounts_table(rows: list[dict]) -> None:
                 {"name": "interest_frequency", "label": "Interest", "field": "interest_frequency"},
                 {"name": "access_type", "label": "Access", "field": "access_type"},
                 {"name": "maturity_date", "label": "Maturity", "field": "maturity_date"},
+                {"name": "opened_date", "label": "Opened", "field": "opened_date"},
                 {"name": "latest_balance", "label": "Latest balance", "field": "latest_balance"},
                 {"name": "notes", "label": "Notes", "field": "notes"},
             ],
@@ -231,6 +232,7 @@ def _accounts_table(rows: list[dict]) -> None:
                     "rate": f"{row['interest_rate_pct']:.2f}"
                     if row["interest_rate_pct"] is not None
                     else "—",
+                    "opened_date": row.get("opened_date") or "—",
                     "latest_balance": format_gbp(row["latest_balance"])
                     if row["latest_balance"] is not None
                     else "—",
@@ -342,7 +344,6 @@ def _recurring_table(rows: list[dict]) -> None:
                 {"name": "frequency", "label": "Frequency", "field": "frequency"},
                 {"name": "from", "label": "From", "field": "from"},
                 {"name": "to", "label": "To", "field": "to"},
-                {"name": "net", "label": "Affects net worth", "field": "net"},
                 {"name": "active", "label": "Active", "field": "active"},
                 {"name": "notes", "label": "Notes", "field": "notes"},
             ],
@@ -350,7 +351,6 @@ def _recurring_table(rows: list[dict]) -> None:
                 {
                     **row,
                     "amount": format_gbp(row["amount"]),
-                    "net": "Yes" if row["affects_net_worth"] else "No",
                     "active": "Yes" if row["active"] else "No",
                 }
                 for row in rows

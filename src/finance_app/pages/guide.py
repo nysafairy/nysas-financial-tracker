@@ -56,16 +56,17 @@ def _getting_started() -> None:
         (
             "02",
             "Start a snapshot",
-            "The app stays view-only until you click Start new snapshot in the bar "
-            "at the top. That opens an autosaved draft session and unlocks Edit data.",
+            "Balances stay view-only until you click Start new snapshot in the bar "
+            "at the top. That opens an autosaved draft for the balances sheet and History. "
+            "Income, transactions, and recurring can be edited any time and save immediately.",
         ),
         (
             "03",
             "Balances sheet",
             "Edit the spreadsheet of accounts for that date: name, type, provider, "
-            "rates, access, bank details, notes, and balance. Add savings types such "
-            "as easy access, regular saver, fixed terms, or Premium Bonds. Overview "
-            "updates from the draft as you type.",
+            "rates, access, bank details, opened date, notes, and balance. Add savings "
+            "types such as easy access, regular saver, fixed terms, or Premium Bonds. "
+            "Overview updates from the draft as you type.",
         ),
         (
             "04",
@@ -77,11 +78,12 @@ def _getting_started() -> None:
         (
             "05",
             "Income and extras",
-            "While a session is open you can also log income and recurring items. "
-            "For fixed pay, Yearly/Monthly is only the unit you type; Paid is how "
-            "often money arrives (weekly, fortnightly, and so on). Investment "
-            "wrappers (ISA, GIA, SIPP) are one balance each — there is no separate "
-            "stock list. Tax & tools stay available any time.",
+            "Log salary, freelance, and other income under Edit data → Income "
+            "(no snapshot session required). For fixed pay, Yearly/Monthly is only the "
+            "unit you type; Paid is how often money arrives. Receipts on fixed sources "
+            "count as bonuses/extras on top of pro-rated expected pay. Ledger "
+            "transactions are for interest, dividends, contributions, and tax — not "
+            "salary. Investment wrappers (ISA, GIA, SIPP) are one balance each.",
         ),
         (
             "06",
@@ -113,9 +115,10 @@ def _getting_started() -> None:
     with ui.element("div").classes("guide-callout"):
         ui.html(
             "<strong>Draft sessions</strong>"
-            "<p>Closing the app mid-session keeps the draft. Reopen the profile and "
-            "continue, or discard. Incomplete balances cannot be saved. Pay rises "
-            "still use Record a pay change on the Income tab inside a session.</p>",
+            "<p>Closing the app mid-session keeps the balance draft. Reopen the profile "
+            "and continue, or discard. Incomplete balances cannot be saved. Income, "
+            "transactions, and recurring save as soon as you add them — they are not "
+            "held in the draft. Pay rises use Record a pay change on the Income tab.</p>",
             sanitize=False,
         )
 
@@ -169,17 +172,17 @@ def _how_it_works() -> None:
         ),
         (
             "Variable income",
-            "Freelance and gigs count only from receipts you log. Fixed sources "
-            "are not replaced by receipts; use receipts for bonuses or extras if "
-            "you want them visible separately. Variable income is not auto-included "
+            "Freelance and gigs count only from receipts you log. Fixed sources use "
+            "pro-rated expected pay; receipts on those sources add as bonuses or extras "
+            "in Overview and Income report totals. Variable income is not auto-included "
             "in Forecasting — add it as a temporary what-if if needed.",
         ),
         (
             "Recurring items",
             "Subscriptions are outflow reminders and reduce forecast monthly surplus. "
-            "Standing orders are transfers; keep affects-net-worth off when money "
-            "stays inside your accounts. Recurring income is a schedule, not a "
-            "substitute for salary history.",
+            "Standing orders are transfers between your own accounts and do not change "
+            "net worth by themselves. Forecast-only income is a schedule for Forecasting, "
+            "not a substitute for salary history on Income sources.",
         ),
         (
             "Forecasting",
@@ -340,9 +343,9 @@ def _edge_cases() -> None:
         ),
         (
             "Bonus and overtime",
-            "A fixed rate does not include one-offs. Log a receipt, or record a "
-            "short-lived rate change if you want the tax year total to include them "
-            "in the pro-rata path.",
+            "Log a receipt on the fixed income source — Overview and Income report "
+            "add those extras on top of pro-rated expected pay. Or record a short-lived "
+            "rate change if the rise should split the year in the pro-rata path.",
         ),
         (
             "ISA and LISA undercount",

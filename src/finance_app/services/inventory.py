@@ -164,7 +164,6 @@ def database_inventory() -> dict[str, Any]:
                 if r.from_account_id
                 else "—",
                 "to": account_names.get(r.to_account_id, "—") if r.to_account_id else "—",
-                "affects_net_worth": r.affects_net_worth,
                 "active": r.active,
                 "notes": r.notes or "",
             }

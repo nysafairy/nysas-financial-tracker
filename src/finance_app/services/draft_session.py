@@ -796,7 +796,7 @@ def _update_kwargs_from_draft(row: SnapshotDraftAccount) -> dict[str, Any]:
 
 
 def commit_draft() -> dict[str, Any]:
-    """Apply draft account ops and balances, then clear the draft."""
+    """Apply draft account ops and balances in one DB transaction, then clear draft."""
     missing = missing_balances()
     if missing:
         raise ValueError(
@@ -810,6 +810,7 @@ def commit_draft() -> dict[str, Any]:
         raise ValueError("No open snapshot session")
 
     as_of = state["as_of_date"]
+    balance_rows = list(state["rows"])
     temp_to_id: dict[str, int] = {}
 
     with get_session() as session:
@@ -823,7 +824,6 @@ def commit_draft() -> dict[str, Any]:
                 )
             ).all()
         )
-        # Detach values we need after session closes
         ops = [
             {
                 "op": row.op,
@@ -837,32 +837,42 @@ def commit_draft() -> dict[str, Any]:
             for row in draft_accounts
         ]
 
-    for row in ops:
-        if row["op"] == "create" and row["temp_key"]:
-            created = account_service.create_account(
-                row["name"] or "New account",
-                row["account_type"] or AccountType.OTHER.value,
-                **row["create_kwargs"],
-            )
-            temp_to_id[row["temp_key"]] = created.id
-        elif row["op"] == "update" and row["account_id"] is not None:
-            kwargs = row["update_kwargs"]
-            if kwargs:
-                account_service.update_account(row["account_id"], **kwargs)
-        elif row["op"] == "deactivate" and row["account_id"] is not None:
-            account_service.update_account(row["account_id"], active=False)
+        for row in ops:
+            if row["op"] == "create" and row["temp_key"]:
+                created = account_service.create_account(
+                    row["name"] or "New account",
+                    row["account_type"] or AccountType.OTHER.value,
+                    session=session,
+                    **row["create_kwargs"],
+                )
+                temp_to_id[row["temp_key"]] = created.id
+            elif row["op"] == "update" and row["account_id"] is not None:
+                kwargs = row["update_kwargs"]
+                if kwargs:
+                    account_service.update_account(
+                        row["account_id"], session=session, **kwargs
+                    )
+            elif row["op"] == "deactivate" and row["account_id"] is not None:
+                account_service.update_account(
+                    row["account_id"], active=False, session=session
+                )
 
-    balances: dict[int, float] = {}
-    for row in state["rows"]:
-        if row["balance"] is None:
-            continue
-        if row["account_id"] is not None:
-            balances[int(row["account_id"])] = float(row["balance"])
-        elif row["temp_key"] and row["temp_key"] in temp_to_id:
-            balances[temp_to_id[row["temp_key"]]] = float(row["balance"])
+        balances: dict[int, float] = {}
+        for row in balance_rows:
+            if row["balance"] is None:
+                continue
+            if row["account_id"] is not None:
+                balances[int(row["account_id"])] = float(row["balance"])
+            elif row["temp_key"] and row["temp_key"] in temp_to_id:
+                balances[temp_to_id[row["temp_key"]]] = float(row["balance"])
 
-    count = snapshot_service.record_balances_for_date(as_of, balances)
-    discard_draft()
+        count = snapshot_service.record_balances_for_date(
+            as_of, balances, session=session
+        )
+
+        for existing in list(session.scalars(select(SnapshotDraft)).all()):
+            session.delete(existing)
+
     return {
         "as_of_date": as_of,
         "balances_written": count,

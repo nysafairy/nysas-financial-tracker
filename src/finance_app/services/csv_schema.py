@@ -34,6 +34,8 @@ BALANCE_SNAPSHOTS_CSV = "balance_snapshots.csv"
 RECURRING_CSV = "recurring.csv"
 INCOME_STREAMS_CSV = "income_streams.csv"
 INCOME_RECEIPTS_CSV = "income_receipts.csv"
+INCOME_RATE_PERIODS_CSV = "income_rate_periods.csv"
+ALLOWANCE_BASELINES_CSV = "allowance_baselines.csv"
 SUMMARY_CSV = "summary.csv"
 README_TXT = "README.txt"
 
@@ -79,7 +81,6 @@ RECURRING_FIELDS = [
     "frequency",
     "from_account_id",
     "to_account_id",
-    "affects_net_worth",
     "active",
     "notes",
 ]
@@ -105,6 +106,22 @@ INCOME_RECEIPT_FIELDS = [
     "description",
 ]
 
+INCOME_RATE_PERIOD_FIELDS = [
+    "id",
+    "stream_id",
+    "effective_from",
+    "annual_amount",
+    "notes",
+]
+
+ALLOWANCE_BASELINE_FIELDS = [
+    "id",
+    "tax_year",
+    "allowance_key",
+    "prior_used",
+    "notes",
+]
+
 # Required files for a valid import zip (headers must match exactly).
 IMPORT_TABLES: dict[str, list[str]] = {
     ACCOUNTS_CSV: ACCOUNT_FIELDS,
@@ -113,6 +130,12 @@ IMPORT_TABLES: dict[str, list[str]] = {
     RECURRING_CSV: RECURRING_FIELDS,
     INCOME_STREAMS_CSV: INCOME_STREAM_FIELDS,
     INCOME_RECEIPTS_CSV: INCOME_RECEIPT_FIELDS,
+}
+
+# Optional on import (older zips may omit them); always written on export.
+OPTIONAL_IMPORT_TABLES: dict[str, list[str]] = {
+    INCOME_RATE_PERIODS_CSV: INCOME_RATE_PERIOD_FIELDS,
+    ALLOWANCE_BASELINES_CSV: ALLOWANCE_BASELINE_FIELDS,
 }
 
 
@@ -211,13 +234,19 @@ def template_readme() -> str:
         lines.append("")
     lines.extend(
         [
-            "Booleans (active, affects_net_worth): true/false, 1/0, yes/no.",
+            "Booleans (active): true/false, 1/0, yes/no.",
             "Dates: YYYY-MM-DD.",
             "Currency defaults to GBP if blank.",
             "Empty optional cells are fine.",
             "",
             "Required files:",
             *[f"  - {name}" for name in IMPORT_TABLES],
+            "",
+            "Optional files (recommended for full backup restore):",
+            *[f"  - {name}" for name in OPTIONAL_IMPORT_TABLES],
+            "",
+            "Employment / self-employed pay belongs in income_streams + receipts,",
+            "not as earnings-style rows in transactions.csv.",
             "",
             "summary.csv is written on export only and is ignored on import.",
         ]
@@ -297,7 +326,6 @@ def example_template_rows() -> dict[str, list[dict]]:
                 "frequency": Frequency.MONTHLY.value,
                 "from_account_id": "1",
                 "to_account_id": "",
-                "affects_net_worth": "true",
                 "active": "true",
                 "notes": "",
             }
@@ -322,7 +350,25 @@ def example_template_rows() -> dict[str, list[dict]]:
                 "stream_id": "1",
                 "date": "2026-05-15",
                 "amount": "100.00",
-                "description": "Optional example receipt",
+                "description": "Optional bonus / extra on a fixed source",
+            }
+        ],
+        INCOME_RATE_PERIODS_CSV: [
+            {
+                "id": "1",
+                "stream_id": "1",
+                "effective_from": "2026-04-06",
+                "annual_amount": "42000",
+                "notes": "Initial rate",
+            }
+        ],
+        ALLOWANCE_BASELINES_CSV: [
+            {
+                "id": "1",
+                "tax_year": "2026-27",
+                "allowance_key": "adult_isa",
+                "prior_used": "1000",
+                "notes": "Used before starting this profile",
             }
         ],
     }

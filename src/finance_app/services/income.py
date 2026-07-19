@@ -54,6 +54,7 @@ def create_stream(
     tax_band: TaxBand | str | None = None,
     notes: str | None = None,
     effective_from: date | None = None,
+    create_initial_rate_period: bool = True,
 ) -> IncomeStream:
     if isinstance(category, str):
         category = IncomeCategory(category)
@@ -90,7 +91,8 @@ def create_stream(
         session.add(stream)
         session.flush()
         if (
-            expected_amount is not None
+            create_initial_rate_period
+            and expected_amount is not None
             and cadence != IncomeCadence.VARIABLE
         ):
             session.add(
@@ -155,6 +157,38 @@ def list_rate_periods(stream_id: int) -> list[IncomeRatePeriod]:
             .order_by(IncomeRatePeriod.effective_from.desc())
         )
         return list(session.scalars(stmt).all())
+
+
+def list_all_rate_periods() -> list[IncomeRatePeriod]:
+    with get_session() as session:
+        stmt = select(IncomeRatePeriod).order_by(
+            IncomeRatePeriod.stream_id, IncomeRatePeriod.effective_from
+        )
+        return list(session.scalars(stmt).all())
+
+
+def add_rate_period(
+    stream_id: int,
+    *,
+    effective_from: date,
+    annual_amount: float,
+    notes: str | None = None,
+) -> IncomeRatePeriod:
+    with get_session() as session:
+        stream = session.get(IncomeStream, stream_id)
+        if stream is None:
+            raise ValueError("Income stream not found")
+        period = IncomeRatePeriod(
+            stream_id=stream_id,
+            effective_from=effective_from,
+            annual_amount=float(annual_amount),
+            notes=notes,
+        )
+        session.add(period)
+        session.flush()
+        session.refresh(period)
+        session.expunge(period)
+        return period
 
 
 def delete_stream(stream_id: int) -> None:
@@ -230,24 +264,6 @@ def monthly_equivalent(stream: IncomeStream) -> float | None:
     if annual <= 0:
         return 0.0
     return annual / 12.0
-
-
-def payday_amount(stream: IncomeStream) -> float | None:
-    """Amount typically received on each payday for a fixed stream."""
-    if stream.cadence == IncomeCadence.VARIABLE:
-        return None
-    annual = _annualise_expected(stream)
-    if annual <= 0:
-        return 0.0
-    freq = stream.pay_frequency or PayFrequency.MONTHLY
-    divisors = {
-        PayFrequency.WEEKLY: 52.0,
-        PayFrequency.BI_WEEKLY: 26.0,
-        PayFrequency.FOUR_WEEKLY: 13.0,
-        PayFrequency.MONTHLY: 12.0,
-        PayFrequency.YEARLY: 1.0,
-    }
-    return annual / divisors[freq]
 
 
 def _pro_rata_with_rate_history(
@@ -338,10 +354,15 @@ def income_by_source(on: date | None = None) -> dict[str, Any]:
                 basis = "receipts"
                 expected_annual = None
             else:
-                amount = _pro_rata_with_rate_history(
+                expected = _pro_rata_with_rate_history(
                     stream, periods_by_stream.get(stream.id, []), today
                 )
-                basis = "expected_pro_rata"
+                amount = expected + received
+                basis = (
+                    "expected_pro_rata_plus_receipts"
+                    if received
+                    else "expected_pro_rata"
+                )
                 expected_annual = _annualise_expected(stream)
 
             cat_label = INCOME_CATEGORY_LABELS[stream.category]
@@ -615,13 +636,19 @@ def income_report(
                 expected_annual = None
             else:
                 # Pro-rate from period start through end (not full tax year).
-                amount = _pro_rata_range(
+                expected = _pro_rata_range(
                     stream,
                     periods_by_stream.get(stream.id, []),
                     start,
                     end,
                 )
-                basis = "expected_pro_rata"
+                extras = receipt_totals.get(stream.id, 0.0)
+                amount = expected + extras
+                basis = (
+                    "expected_pro_rata_plus_receipts"
+                    if extras
+                    else "expected_pro_rata"
+                )
                 expected_annual = _annualise_expected(stream)
             source_rows.append(
                 {

@@ -241,6 +241,29 @@ TRANSACTION_TYPE_LABELS: dict[TransactionType, str] = {
     TransactionType.OTHER: "Other",
 }
 
+# Employment / self-employed income belongs on IncomeStream — not the ledger.
+DEPRECATED_INCOME_TRANSACTION_TYPES = frozenset(
+    {
+        TransactionType.EARNINGS,
+        TransactionType.PENSION_INCOME,
+        TransactionType.PROPERTY_INCOME,
+        TransactionType.TRUST_INCOME,
+    }
+)
+
+# Types offered when adding ledger transactions in the UI.
+LEDGER_TRANSACTION_TYPE_LABELS: dict[TransactionType, str] = {
+    txn_type: label
+    for txn_type, label in TRANSACTION_TYPE_LABELS.items()
+    if txn_type not in DEPRECATED_INCOME_TRANSACTION_TYPES
+}
+
+RECURRING_KIND_LABELS_UI: dict[RecurringKind, str] = {
+    RecurringKind.SUBSCRIPTION: "Subscription",
+    RecurringKind.STANDING_ORDER: "Standing order (between own accounts)",
+    RecurringKind.INCOME: "Forecast-only income schedule",
+}
+
 RECURRING_KIND_LABELS: dict[RecurringKind, str] = {
     RecurringKind.SUBSCRIPTION: "Subscription",
     RecurringKind.STANDING_ORDER: "Standing order",
@@ -377,9 +400,6 @@ class Transaction(Base):
     )
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    counterparty_account_id: Mapped[int | None] = mapped_column(
-        ForeignKey("accounts.id"), nullable=True
-    )
 
     account: Mapped[Account | None] = relationship(
         back_populates="transactions", foreign_keys=[account_id]
@@ -490,11 +510,8 @@ class RecurringItem(Base):
     to_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id"), nullable=True
     )
-    day_of_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Standing orders move money between own accounts and do not change net worth.
-    affects_net_worth: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class IncomeStream(Base):

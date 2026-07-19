@@ -59,6 +59,56 @@ def _contributions_by_account_type() -> dict[AccountType, float]:
         return totals
 
 
+def list_baselines(*, tax_year: str | None = None) -> list[AllowanceBaseline]:
+    """Return baseline rows, optionally filtered to one tax year."""
+    with get_session() as session:
+        stmt = select(AllowanceBaseline).order_by(
+            AllowanceBaseline.tax_year, AllowanceBaseline.allowance_key
+        )
+        if tax_year:
+            stmt = stmt.where(AllowanceBaseline.tax_year == tax_year)
+        return list(session.scalars(stmt).all())
+
+
+def upsert_baseline(
+    *,
+    tax_year: str,
+    allowance_key: str,
+    prior_used: float,
+    notes: str | None = None,
+) -> None:
+    """Upsert a single allowance baseline row (used by CSV import)."""
+    if allowance_key not in TRACKED_BASELINE_KEYS:
+        raise ValueError(f"Unknown allowance key: {allowance_key}")
+    amount = float(prior_used or 0)
+    if amount < 0:
+        raise ValueError(f"{allowance_key} prior usage cannot be negative")
+    with get_session() as session:
+        existing = session.scalar(
+            select(AllowanceBaseline).where(
+                AllowanceBaseline.tax_year == tax_year,
+                AllowanceBaseline.allowance_key == allowance_key,
+            )
+        )
+        if amount <= 0:
+            if existing is not None:
+                session.delete(existing)
+            return
+        if existing is not None:
+            existing.prior_used = amount
+            if notes is not None:
+                existing.notes = notes
+        else:
+            session.add(
+                AllowanceBaseline(
+                    tax_year=tax_year,
+                    allowance_key=allowance_key,
+                    prior_used=amount,
+                    notes=notes,
+                )
+            )
+
+
 def get_baselines(tax_year: str | None = None) -> dict[str, float]:
     """Return prior_used amounts keyed by allowance_key for the tax year."""
     year = tax_year or current_tax_year_label()

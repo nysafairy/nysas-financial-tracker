@@ -13,8 +13,10 @@ from finance_app.db.models import (
     INCOME_CADENCE_LABELS,
     INCOME_CATEGORY_LABELS,
     INTEREST_FREQUENCY_LABELS,
+    LEDGER_TRANSACTION_TYPE_LABELS,
     PAY_FREQUENCY_LABELS,
     RECURRING_KIND_LABELS,
+    RECURRING_KIND_LABELS_UI,
     TAX_BAND_LABELS,
     TAX_TREATMENT_LABELS,
     TRANSACTION_TYPE_LABELS,
@@ -45,18 +47,16 @@ def register() -> None:
             return
 
         with render_shell("/edit"):
-            if not require_draft_session():
-                page_header(
-                    "Edit data",
-                    "Editing opens inside a snapshot session so changes can be "
-                    "reviewed on Overview before you commit.",
-                )
-                _no_session_gate()
-                return
-
+            has_draft = require_draft_session()
             page_header(
                 "Edit data",
-                "Draft session. Balances autosave. Commit with Save snapshot above.",
+                (
+                    "Draft session open — balances autosave; Save snapshot commits them. "
+                    "Income, transactions, and recurring save immediately."
+                    if has_draft
+                    else "Income, transactions, and recurring can be edited any time. "
+                    "Balances and History need a snapshot session."
+                ),
             )
 
             with ui.element("div").classes("session-sheet"):
@@ -69,17 +69,24 @@ def register() -> None:
                     tab_snaps = ui.tab("History")
                     tab_recurring = ui.tab("Recurring")
 
-                with ui.tab_panels(tabs, value=tab_balances).classes(
+                default_tab = tab_balances if has_draft else tab_income
+                with ui.tab_panels(tabs, value=default_tab).classes(
                     "w-full session-tab-panels"
                 ):
                     with ui.tab_panel(tab_balances):
-                        _balances_panel()
+                        if has_draft:
+                            _balances_panel()
+                        else:
+                            _no_session_gate(focus="balances")
                     with ui.tab_panel(tab_income):
                         _income_panel()
                     with ui.tab_panel(tab_txns):
                         _transactions_panel()
                     with ui.tab_panel(tab_snaps):
-                        _snapshots_panel()
+                        if has_draft:
+                            _snapshots_panel()
+                        else:
+                            _no_session_gate(focus="history")
                     with ui.tab_panel(tab_recurring):
                         _recurring_panel()
 
@@ -96,20 +103,29 @@ def _parse_date(raw) -> date | None:
     return date.fromisoformat(str(raw)[:10])
 
 
-def _no_session_gate() -> None:
+def _no_session_gate(*, focus: str = "balances") -> None:
     with ui.element("div").classes("panel"):
-        ui.html('<h2 class="panel-title">No snapshot session open</h2>', sanitize=False)
-        ui.label(
-            "Start a new snapshot from the bar at the top of any page, or reopen a "
-            "past date from History once a session is open. That unlocks this "
-            "spreadsheet and other edit tabs, autosaves your work, and lets Overview "
-            "reflect the draft until you save or discard."
-        ).style("color: var(--text-muted); margin-bottom: 1rem; max-width: 40rem;")
+        if focus == "history":
+            title = "Snapshot history needs a session"
+            body = (
+                "Start a new snapshot from the bar above, then use History to reopen "
+                "or edit a past date. Income and recurring do not need a session."
+            )
+        else:
+            title = "Balances need a snapshot session"
+            body = (
+                "Click Start new snapshot in the bar above to edit account balances. "
+                "That unlocks this spreadsheet and History. Income, transactions, and "
+                "recurring save immediately without a session."
+            )
+        ui.html(f'<h2 class="panel-title">{title}</h2>', sanitize=False)
+        ui.label(body).style(
+            "color: var(--text-muted); margin-bottom: 1rem; max-width: 40rem;"
+        )
         ui.button(
             "Go to Overview",
             on_click=lambda: ui.navigate.to("/"),
         ).props("flat")
-
 
 def _balances_panel() -> None:
     state = draft_session.effective_accounts_and_balances()
@@ -176,6 +192,7 @@ def _balances_panel() -> None:
         ("Access", ""),
         ("Notice", "sheet-th-num"),
         ("Maturity", ""),
+        ("Opened", ""),
         ("Sort code", ""),
         ("Account no.", ""),
         ("Notes", ""),
@@ -385,6 +402,39 @@ def _balances_panel() -> None:
                             maturity_input.on("blur", make_maturity())
 
                         with ui.element("td").classes("sheet-td"):
+                            opened_raw = row.get("opened_date")
+                            if opened_raw is None:
+                                opened_text = ""
+                            elif hasattr(opened_raw, "isoformat"):
+                                opened_text = opened_raw.isoformat()
+                            else:
+                                opened_text = str(opened_raw)[:10]
+                            opened_input = ui.input(
+                                value=opened_text,
+                                placeholder="YYYY-MM-DD",
+                            ).props(cell_props).classes("sheet-input")
+
+                            def make_opened(r=row, widget=opened_input):
+                                def on_blur() -> None:
+                                    parsed = _parse_date(widget.value)
+                                    if parsed is None:
+                                        draft_session.update_draft_account_fields(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            clear_opened_date=True,
+                                        )
+                                    else:
+                                        draft_session.update_draft_account_fields(
+                                            account_id=r["account_id"],
+                                            temp_key=r["temp_key"],
+                                            opened_date=parsed,
+                                        )
+
+                                return on_blur
+
+                            opened_input.on("blur", make_opened())
+
+                        with ui.element("td").classes("sheet-td"):
                             sort_input = ui.input(
                                 value=row["sort_code"] or ""
                             ).props(cell_props).classes("sheet-input")
@@ -529,12 +579,11 @@ def _income_panel() -> None:
     with ui.element("div").classes("panel"):
         ui.html('<h2 class="panel-title">Add income source</h2>', sanitize=False)
         ui.label(
-            "Fixed sources use an expected amount (pro-rated across the tax year). "
+            "Fixed sources use an expected amount (pro-rated across the tax year); "
+            "receipts logged against them count as bonuses or extras on top. "
             "Yearly/Monthly is only the unit for that amount. Paid is how often "
-            "money actually arrives (weekly, fortnightly, etc.). Variable sources "
-            "only count receipts you log when you get paid. Tax treatment feeds "
-            "Forecasting and the Income report; optional tax band is for your records "
-            "and display (the estimate still derives the band from total income)."
+            "money actually arrives. Variable sources only count receipts. "
+            "Tax treatment feeds Forecasting and the Income report."
         ).style("color: var(--text-muted); margin-bottom: 0.75rem;")
         with ui.element("div").classes("form-stack"):
             name = ui.input("Name", placeholder="e.g. Day job, Upwork, Client X").classes(
@@ -880,10 +929,16 @@ def _income_panel() -> None:
 def _transactions_panel() -> None:
     accounts = account_service.list_accounts(active_only=True)
     account_options = {"": "— None —", **{str(a.id): a.name for a in accounts}}
-    type_options = {t.value: label for t, label in TRANSACTION_TYPE_LABELS.items()}
+    type_options = {
+        t.value: label for t, label in LEDGER_TRANSACTION_TYPE_LABELS.items()
+    }
 
     with ui.element("div").classes("panel"):
         ui.html('<h2 class="panel-title">Add transaction</h2>', sanitize=False)
+        ui.label(
+            "Ledger events such as interest, dividends, contributions, and tax. "
+            "Salary and freelance belong under Income sources."
+        ).classes("sheet-help")
         with ui.element("div").classes("form-stack"):
             txn_date = ui.date_input("Date", value=date.today()).classes("w-full")
             txn_type = ui.select(
@@ -1084,7 +1139,7 @@ def _snapshots_panel() -> None:
 def _recurring_panel() -> None:
     accounts = account_service.list_accounts(active_only=True)
     account_options = {"": "— None —", **{str(a.id): a.name for a in accounts}}
-    kind_options = {k.value: label for k, label in RECURRING_KIND_LABELS.items()}
+    kind_options = {k.value: label for k, label in RECURRING_KIND_LABELS_UI.items()}
     freq_options = {f.value: label for f, label in FREQUENCY_LABELS.items()}
 
     with ui.element("div").classes("panel"):
@@ -1094,7 +1149,8 @@ def _recurring_panel() -> None:
         )
         ui.label(
             "Standing orders move money between your own accounts and do not change "
-            "net worth. Subscriptions are outflow reminders (not a cashflow forecast)."
+            "net worth. Forecast-only income is a schedule for Forecasting — not salary "
+            "history (use Income sources for that)."
         ).style("color: var(--text-muted); margin-bottom: 0.75rem;")
         with ui.element("div").classes("form-stack"):
             name = ui.input("Name").classes("w-full")
@@ -1142,7 +1198,7 @@ def _recurring_panel() -> None:
     with ui.element("div").classes("panel"):
         ui.html('<h2 class="panel-title">Recurring items</h2>', sanitize=False)
         if not items:
-            ui.label("No subscriptions or standing orders yet.")
+            ui.label("No recurring items yet.")
             return
         columns = [
             {"name": "name", "label": "Name", "field": "name"},
@@ -1151,14 +1207,15 @@ def _recurring_panel() -> None:
             {"name": "frequency", "label": "Frequency", "field": "frequency"},
             {"name": "from", "label": "From", "field": "from"},
             {"name": "to", "label": "To", "field": "to"},
-            {"name": "net", "label": "Affects net worth", "field": "net"},
             {"name": "actions", "label": "", "field": "actions"},
         ]
         rows = [
             {
                 "id": item.id,
                 "name": item.name,
-                "kind": RECURRING_KIND_LABELS.get(item.kind, item.kind.value),
+                "kind": RECURRING_KIND_LABELS_UI.get(
+                    item.kind, RECURRING_KIND_LABELS.get(item.kind, item.kind.value)
+                ),
                 "amount": format_gbp(item.amount),
                 "frequency": FREQUENCY_LABELS.get(item.frequency, item.frequency.value),
                 "from": account_names.get(item.from_account_id, "—")
@@ -1167,7 +1224,6 @@ def _recurring_panel() -> None:
                 "to": account_names.get(item.to_account_id, "—")
                 if item.to_account_id
                 else "—",
-                "net": "Yes" if item.affects_net_worth else "No",
             }
             for item in items
         ]

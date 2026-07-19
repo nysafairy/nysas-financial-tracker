@@ -24,16 +24,12 @@ def create_recurring(
     *,
     from_account_id: int | None = None,
     to_account_id: int | None = None,
-    day_of_month: int | None = None,
     notes: str | None = None,
-    affects_net_worth: bool | None = None,
 ) -> RecurringItem:
     if isinstance(kind, str):
         kind = RecurringKind(kind)
     if isinstance(frequency, str):
         frequency = Frequency(frequency)
-    if affects_net_worth is None:
-        affects_net_worth = kind != RecurringKind.STANDING_ORDER
 
     with get_session() as session:
         item = RecurringItem(
@@ -43,9 +39,7 @@ def create_recurring(
             frequency=frequency,
             from_account_id=from_account_id,
             to_account_id=to_account_id,
-            day_of_month=day_of_month,
             notes=notes,
-            affects_net_worth=affects_net_worth,
             active=True,
         )
         session.add(item)
@@ -82,7 +76,7 @@ def monthly_equivalent(amount: float, frequency: Frequency | str) -> float:
 
 
 def recurring_monthly_totals() -> dict[str, float]:
-    """Cashflow totals that affect net worth (excludes standing orders)."""
+    """Cashflow totals by kind (standing orders are transfers, not NW change)."""
     items = list_recurring(active_only=True)
     out = {"subscriptions": 0.0, "income": 0.0, "standing_orders": 0.0}
     for item in items:
